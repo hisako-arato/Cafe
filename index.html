@@ -27,32 +27,46 @@
         </div>
         <div class="stat" title="永久雇用契約">📜 <b id="contracts">0</b></div>
         <div class="stat" title="人気度">💖 <b id="pop">0</b></div>
-        <button class="help" data-action="help" aria-label="遊び方">？</button>
       </div>
     </header>
 
-    <main id="main">
-      <section id="floorWrap">
-        <div id="floor">
-          <div id="counter" class="counter"></div>
-          <div id="miniStoves" class="mini-stoves"></div>
-          <div id="door" class="door">🚪</div>
-          <div id="decorRow" class="decor-row"></div>
+    <main id="screens">
+      <!-- カフェ画面 -->
+      <section id="scr-cafe" class="screen active">
+        <div class="floor-box">
+          <div id="floor">
+            <div id="counter" class="counter"></div>
+            <div id="miniStoves" class="mini-stoves"></div>
+            <div id="door" class="door">🚪</div>
+            <div id="decorRow" class="decor-row"></div>
+          </div>
         </div>
-        <p class="hint">お客さんをタップするとスカウトできます</p>
+        <div class="cafe-bar">
+          <button class="pill-btn" data-action="sheet" data-sheet="staff">👥 スタッフ <b id="staffCount"></b></button>
+          <button class="pill-btn" data-action="sheet" data-sheet="shop">🛒 ショップ</button>
+        </div>
+        <div class="log-window">
+          <div class="log-title">📢 お店のできごと <span>お客さんをタップするとスカウトできます</span></div>
+          <div id="log" class="log"></div>
+        </div>
       </section>
 
-      <section id="panel">
-        <nav class="tabs">
-          <button class="tab active" data-action="tab" data-tab="kitchen">🍳 キッチン</button>
-          <button class="tab" data-action="tab" data-tab="staff">👥 スタッフ</button>
-          <button class="tab" data-action="tab" data-tab="shop">🛒 ショップ</button>
-        </nav>
-        <div id="kitchen" class="pane"></div>
-        <div id="staff" class="pane" hidden></div>
-        <div id="shop" class="pane" hidden></div>
+      <!-- 厨房画面 -->
+      <section id="scr-kitchen" class="screen">
+        <div class="scroll" id="kitchen"></div>
+      </section>
+
+      <!-- 設定画面 -->
+      <section id="scr-settings" class="screen">
+        <div class="scroll" id="settings"></div>
       </section>
     </main>
+
+    <nav id="bottomNav">
+      <button class="nav-btn active" data-action="screen" data-screen="cafe"><i>☕</i><span>カフェ</span></button>
+      <button class="nav-btn" data-action="screen" data-screen="kitchen"><i>🍳</i><span>厨房</span><b class="dot" id="kitchenDot" hidden></b></button>
+      <button class="nav-btn" data-action="screen" data-screen="settings"><i>⚙️</i><span>設定</span></button>
+    </nav>
   </div>
 
   <div id="modal" class="modal" hidden>
