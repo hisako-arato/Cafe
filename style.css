@@ -916,3 +916,19 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .spy-talk .spy-msg { font-size: .82rem; }
 .spy-actions.one { grid-template-columns: 1fr; }
 .note.ok { color: #16a34a; font-weight: 800; }
+
+/* 潜入：視線・隠れ場所 */
+.spy-vision { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; }
+.cone { fill: rgba(253, 224, 71, .26); stroke: rgba(234, 179, 8, .55); stroke-width: .3; transition: fill .2s; }
+.cone.alert { fill: rgba(239, 68, 68, .32); stroke: rgba(220, 38, 38, .7); }
+.cone.off { fill: transparent; stroke: transparent; }
+.spy-hide {
+  position: absolute; transform: translate(-50%, -88%);
+  font-size: 9cqw; line-height: 1; padding: 0; border: 0; background: none; cursor: pointer;
+  filter: drop-shadow(0 .6cqw 0 rgba(0,0,0,.25));
+}
+.spy-map .person.hiding .sprite { opacity: .45; }
+.spy-state { display: inline-block; font-size: .78rem; font-weight: 900; border-radius: 999px; padding: 2px 10px; margin-bottom: 6px; }
+.spy-state.hide { background: #ede9fe; color: #5b21b6; }
+.spy-state.bad { background: #fee2e2; color: #b91c1c; animation: pulse 1s infinite; }
+.spy-state.ok { background: #dcfce7; color: #166534; }

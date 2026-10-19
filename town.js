@@ -516,7 +516,8 @@ function spyPeek() {
     addLog(`💡 潜入先でレシピ「${DISH[recipe].name}」を閃きました`, true);
   } else {
     spySay(`🔍 ${rand(SPY_LINES.peekNg)}`, 'bad');
-    if (raiseAlert(st, 30)) return;
+    // 見られている最中にのぞいて失敗すると、さらに怪しまれる
+    if (raiseAlert(st, doorWatchers() ? 45 : 30)) return;
   }
   save();
 }
@@ -758,6 +759,16 @@ const SPY_MAP = {
   route: [{ x: 18, y: 35 }, { x: 46, y: 37 }, { x: 72, y: 42 }, { x: 42, y: 66 }, { x: 80, y: 68 }, { x: 48, y: 92 }, { x: 84, y: 32 }],
   bounds: { x1: 4, x2: 96, y1: 31, y2: 98 },
   speed: 26, npcSpeed: 13, reach: 12,
+  // 隠れる場所（隠れている間は見つからず、警戒が下がっていく）
+  hides: [
+    { x: 70, y: 37, emoji: '🪴', name: '観葉植物の陰' },
+    { x: 8,  y: 66, emoji: '🗂️', name: 'ついたての陰' },
+    { x: 92, y: 60, emoji: '🧥', name: 'コート掛けの陰' },
+  ],
+  // 店員の視線（扇形）
+  sight: { r: 26, half: 0.62, bossR: 31 },
+  doorZone: 14,       // 厨房の扉のまわり（ここを見られると怪しまれる）
+  loiterSec: 5,       // 立ち止まって見られていると怪しまれるまでの秒数
 };
 const spySeat = i => ({ x: SPY_MAP.tables[i].x - 8, y: SPY_MAP.tables[i].y + 3 });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -769,10 +780,11 @@ function spyInit(st) {
   SPY = {
     storeId: st.id,
     p: { ...SPY_MAP.entrance, flip: true },
-    target: null, pending: null, ctx: null, sitting: false,
+    target: null, pending: null, ctx: null, sitting: false, hidden: false,
+    idle: 0, spotted: [], wasSpotted: false,
     npcs: Object.fromEntries(st.npcs.map((n, i) => {
       const w = SPY_MAP.route[(i * 2) % SPY_MAP.route.length];
-      return [n.id, { x: w.x, y: w.y, tx: w.x, ty: w.y, wait: 1 + Math.random() * 2 }];
+      return [n.id, { x: w.x, y: w.y, tx: w.x, ty: w.y, wait: 1 + Math.random() * 2, dir: Math.PI / 2, scan: Math.random() * 6 }];
     })),
     // 雰囲気づくりのお客さん（2卓に座っている）
     patrons: free.slice(0, 2).map(i => ({ table: i, look: Chara.randomLook(Math.random() < 0.5 ? 'm' : 'f') })),
@@ -783,6 +795,7 @@ function spyInit(st) {
 function spyGo(target, id) {
   if (!SPY) return;
   SPY.sitting = false;
+  SPY.hidden = false;
   SPY.ctx = null;
   if (S.spy) S.spy.focus = null;
   if (target === 'seat') {
@@ -792,6 +805,11 @@ function spyGo(target, id) {
   } else if (target === 'door') {
     SPY.target = { ...SPY_MAP.door };
     SPY.pending = { type: 'door' };
+  } else if (target === 'hide') {
+    const h = SPY_MAP.hides[id];
+    if (!h) return;
+    SPY.target = { x: h.x, y: h.y + 2 };
+    SPY.pending = { type: 'hide', i: id };
   } else if (target === 'npc') {
     const n = SPY.npcs[id];
     if (!n) return;
@@ -808,13 +826,37 @@ function spyMoveTo(x, y) {
   SPY.pending = null;
   SPY.ctx = null;
   SPY.sitting = false;
+  SPY.hidden = false;
   if (S.spy) S.spy.focus = null;
   keys.spyPanel = undefined;
 }
 
-// 店員が近くにいると厨房をのぞきにくい
-const doorWatchers = () => Object.values(SPY?.npcs || {}).filter(n => dist(n, SPY_MAP.door) < 24).length;
-const peekChanceNow = st => clamp(peekChance(st) + (doorWatchers() ? -0.15 * doorWatchers() : 0.1), 0.05, 0.9);
+// ===== 店員の視線 =====
+// 向いている方向（歩いているときは進む方向、立ち止まると左右を見回す）
+const viewDir = n => n.moving ? n.dir : n.dir + Math.sin(n.scan * 1.3) * 0.95;
+function sightRange(st) {
+  const r = st.boss ? SPY_MAP.sight.bossR : SPY_MAP.sight.r;
+  return st.alert >= 60 ? r * 1.2 : r;   // 警戒が高いと遠くまで見ている
+}
+function sees(n, pt, st) {
+  const d = dist(n, pt);
+  if (d > sightRange(st)) return false;
+  if (d < 3) return true;
+  let a = Math.atan2(pt.y - n.y, pt.x - n.x) - viewDir(n);
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  return Math.abs(a) < SPY_MAP.sight.half;
+}
+// 店長を見ている店員（話し相手と、隠れているときは除く）
+function watchersOfMe(st) {
+  if (!SPY || SPY.hidden) return [];
+  return st.npcs.filter(npc => {
+    const n = SPY.npcs[npc.id];
+    return n && !(SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id) && sees(n, SPY.p, st);
+  });
+}
+const doorWatchers = () => { const st = spyStore(); return st ? watchersOfMe(st).length : 0; };
+// 見られていなければのぞきやすく、見られていると成功しにくい
+const peekChanceNow = st => clamp(peekChance(st) + (doorWatchers() ? -0.3 * doorWatchers() : 0.12), 0.03, 0.92);
 
 function spyFrame(dt) {
   if (!S.spy || !SPY) return;
@@ -832,6 +874,8 @@ function spyFrame(dt) {
       if (SPY.pending) {
         SPY.ctx = SPY.pending;
         SPY.sitting = SPY.pending.type === 'seat';
+        SPY.hidden = SPY.pending.type === 'hide';
+        if (SPY.hidden) spySay(`🫥 ${SPY_MAP.hides[SPY.pending.i].name}に隠れた。ここなら見つからない…`, 'info');
         if (SPY.pending.type === 'npc') S.spy.focus = null;
         SPY.pending = null;
         keys.spyPanel = undefined;
@@ -844,7 +888,9 @@ function spyFrame(dt) {
     if (!n) continue;
     const talking = SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id;
     if (talking) { n.moving = false; n.flip = P.x < n.x; continue; }
+    n.scan += dt;
     if (n.wait > 0) { n.wait -= dt; n.moving = false; continue; }
+    if (Math.hypot(n.tx - n.x, n.ty - n.y) > 0.5) n.dir = Math.atan2(n.ty - n.y, n.tx - n.x);
     if (moveTo(n, { x: n.tx, y: n.ty }, SPY_MAP.npcSpeed * dt)) {
       const w = rand(SPY_MAP.route);
       n.tx = w.x; n.ty = w.y;
@@ -856,7 +902,36 @@ function spyFrame(dt) {
     const n = SPY.npcs[SPY.ctx.id];
     if (!n || dist(n, P) > SPY_MAP.reach + 6) { SPY.ctx = null; S.spy.focus = null; keys.spyPanel = undefined; }
   }
+  if (spySight(st, dt)) return;
   if (currentScreen === 'town') renderSpyMap(st);
+}
+
+// 見つかったときの警戒と、隠れて／座って落ち着く。追い出されたら true
+function spySight(st, dt) {
+  const P = SPY.p;
+  const watchers = watchersOfMe(st);
+  const atDoor = dist(P, SPY_MAP.door) < SPY_MAP.doorZone;
+  const still = !P.moving && !SPY.target && !SPY.sitting && !SPY.hidden && SPY.ctx?.type !== 'npc';
+  SPY.idle = still ? SPY.idle + dt : 0;
+  let reason = '';
+  if (watchers.length && atDoor) reason = 'door';
+  else if (watchers.length && SPY.idle > SPY_MAP.loiterSec) reason = 'loiter';
+  SPY.spotted = reason ? watchers.map(n => n.id) : [];
+  if (reason && !SPY.wasSpotted) {
+    spySay(reason === 'door'
+      ? `❗ ${watchers[0].name}に厨房の前にいるところを見られた！ 早く離れよう`
+      : `❗ ${watchers[0].name}が、うろうろしているあなたを怪しんでいる…`, 'bad');
+  }
+  if (!!reason !== SPY.wasSpotted) keys.spyPanel = undefined;
+  SPY.wasSpotted = !!reason;
+  if (reason) {
+    if (raiseAlert(st, (reason === 'door' ? 14 : 4) * watchers.length * dt)) return true;
+  } else if (SPY.hidden) {
+    st.alert = Math.max(0, st.alert - 4 * dt);
+  } else if (SPY.sitting) {
+    st.alert = Math.max(0, st.alert - 0.6 * dt);
+  }
+  return false;
 }
 
 const spyEls = new Map();
@@ -881,6 +956,30 @@ function renderSpyMap(st) {
   const me = spyEl(map, 'me', 'person staff me', PERSON_HTML);
   placePerson(me, { ...P, look: protagLook() }, 'protag');
   me.classList.toggle('sitting', SPY.sitting);
+  me.classList.toggle('hiding', SPY.hidden);
+  if (SPY.hidden) me.style.zIndex = 5;
+  // 視線の扇形
+  const cones = $('spyCones');
+  const r = sightRange(st), half = SPY_MAP.sight.half;
+  for (const npc of st.npcs) {
+    const n = SPY.npcs[npc.id];
+    if (!n) continue;
+    let path = cones.querySelector(`[data-n="${npc.id}"]`);
+    if (!path) {
+      path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.dataset.n = npc.id;
+      cones.appendChild(path);
+    }
+    const talking = SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id;
+    const d0 = viewDir(n), ex = n.x, ey = n.y - 3;
+    let d = `M${ex.toFixed(1)} ${ey.toFixed(1)}`;
+    for (let k = 0; k <= 8; k++) {
+      const a = d0 - half + (2 * half) * k / 8;
+      d += ` L${(ex + Math.cos(a) * r).toFixed(1)} ${(ey + Math.sin(a) * r).toFixed(1)}`;
+    }
+    path.setAttribute('d', d + ' Z');
+    path.setAttribute('class', 'cone' + (SPY.spotted.includes(npc.id) ? ' alert' : '') + (talking ? ' off' : ''));
+  }
   for (const npc of st.npcs) {
     const n = SPY.npcs[npc.id];
     if (!n) continue;
@@ -891,7 +990,7 @@ function renderSpyMap(st) {
     const label = `${npc.ace ? '★' : ''}${npc.name}`;
     if (tag.textContent !== label) { tag.textContent = label; tag.className = 'tag ' + (npc.ace ? 'owner' : 'perm'); }
     const bubble = el.querySelector('.bubble');
-    const b = npc.aff >= 100 ? '💖' : SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id ? '💬' : '';
+    const b = SPY.spotted.includes(npc.id) ? '❗' : npc.aff >= 100 ? '💖' : SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id ? '💬' : '';
     if (bubble.textContent !== b) bubble.textContent = b;
   }
   SPY.patrons.forEach((p, i) => {
@@ -908,6 +1007,9 @@ function spyStaticHTML(st) {
     <div class="spy-counter">${st.recipes.slice(0, 2).map(r => `<span>${DISH[r].emoji}</span>`).join('')}</div>
     <button class="spy-door" data-action="spyGo" data-target="door" aria-label="厨房の扉"><span>STAFF<br>ONLY</span></button>
     <div class="spy-entrance">🚪</div>
+    <svg class="spy-vision" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g id="spyCones"></g></svg>
+    ${SPY_MAP.hides.map((h, i) => `<button class="spy-hide" data-action="spyGo" data-target="hide" data-id="${i}" aria-label="${h.name}"
+      style="left:${h.x}%;top:${h.y}%;z-index:${12 + h.y}">${h.emoji}</button>`).join('')}
     ${SPY_MAP.tables.map((t, i) => `
       <div class="chair" style="left:${spySeat(i).x}%;top:${spySeat(i).y}%;z-index:${9 + Math.round(spySeat(i).y)}">${CHAIR_SVG}</div>
       <button class="table spy-table" data-action="spyGo" data-target="seat" data-id="${i}" aria-label="席${i + 1}"
@@ -917,15 +1019,17 @@ function spyStaticHTML(st) {
 function spyPanelHTML(st) {
   const ctx = SPY.ctx;
   const recipeLeft = st.recipes.some(r => !S.recipes.includes(r));
-  let body = '<p class="note">💡 床をタップして歩く／🪑 席に座って注文／🚪 厨房の扉を調べる／🧑 店員に近づいて話す</p>';
+  let body = '<p class="note">💡 床をタップして歩く／🪑 席に座って注文／🚪 厨房の扉を調べる／🧑 店員に近づいて話す／🪴 物陰に隠れる。黄色い扇形は店員の視線です</p>';
   if (SPY.pending) body = '<p class="note">移動中…</p>';
-  if (ctx?.type === 'seat') {
+  if (ctx?.type === 'hide') {
+    body = `<p class="note ok">🫥 ${SPY_MAP.hides[ctx.i].name}に隠れています。見つからず、警戒ゲージが少しずつ下がります。床をタップすると出ます。</p>`;
+  } else if (ctx?.type === 'seat') {
     body = `<div class="spy-actions one">
       <button class="act" data-action="spyEat" ${S.money >= eatCost(st) ? '' : 'disabled'}>
         <b>🍽️ 注文して食べる</b><small>${yen(eatCost(st))}・${recipeLeft ? `レシピを閃く ${Math.round(eatChance(st) * 100)}%` : 'レシピは閃き済み'}</small></button></div>`;
   } else if (ctx?.type === 'door') {
     const w = doorWatchers();
-    body = `<p class="note ${w ? 'warn' : 'ok'}">${w ? `👀 近くに店員が${w}人いる…見られているかも` : '✨ 今なら誰も見ていない！'}</p>
+    body = `<p class="note ${w ? 'warn' : 'ok'}">${w ? `👀 店員${w}人に見られている！ のぞくなら今じゃない…` : '✨ 今なら誰も見ていない！ チャンス'}</p>
       <div class="spy-actions one">
       <button class="act risky" data-action="spyPeek" ${recipeLeft ? '' : 'disabled'}>
         <b>🔍 厨房をのぞく</b><small>${recipeLeft ? `レシピを閃く ${Math.round(peekChanceNow(st) * 100)}%・失敗すると警戒大` : 'レシピは閃き済み'}</small></button></div>`;
@@ -934,7 +1038,10 @@ function spyPanelHTML(st) {
     if (n) body = `<div class="staff-list">${npcRow(n, true, st)}</div>
       ${S.staff.length >= staffCap() ? '<p class="note warn">スタッフがいっぱいなので、今は誘えません。</p>' : ''}`;
   }
-  return `<div class="spy-talk">
+  const status = SPY.hidden ? '<span class="spy-state hide">🫥 隠れている</span>'
+    : SPY.wasSpotted ? '<span class="spy-state bad">❗ 怪しまれている</span>'
+    : SPY.sitting ? '<span class="spy-state ok">🪑 お客さんらしくしている</span>' : '';
+  return `${status}<div class="spy-talk">
       <div class="spy-bust">${Stand.svg(protagStandLook(), S.wardrobe.eq, 'bust')}</div>
       <div class="spy-msg ${S.spy.kind}">${S.spy.msg.replace(/\n/g, '<br>')}</div>
     </div>
@@ -964,6 +1071,7 @@ function renderSpy() {
   $('spyStats').textContent = `💖 魅力 ${charm()}　🕶️ 馴染み ${blend(st)}（ドレスコード：${STYLES[storeType(st).style]}）`;
   const ctx = SPY.ctx;
   const key = [S.spy.seq, ctx ? ctx.type + (ctx.id ?? ctx.i ?? '') : '', !!SPY.pending, ctx?.type === 'door' ? doorWatchers() : '',
+    SPY.hidden, SPY.wasSpotted, SPY.sitting,
     st.npcs.map(n => n.id + ':' + n.aff + ':' + Object.keys(n.known).length).join(','), S.spy.focus ? S.spy.focus.id + S.spy.focus.mode : '',
     S.money >= eatCost(st), S.staff.length >= staffCap()].join('|');
   setKeyed($('spyPanel'), 'spyPanel', key, spyPanelHTML(st));
