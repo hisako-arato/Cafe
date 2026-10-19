@@ -831,6 +831,10 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* 登録できなくてもゲームは遊べる */ });
+}
+
 initRuntime();
 renderUI();
 requestAnimationFrame(frame);

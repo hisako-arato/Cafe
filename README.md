@@ -22,6 +22,17 @@ GitHub Pages で公開する場合は、リポジトリの **Settings → Pages*
 「Deploy from a branch」→ ブランチ `main`・フォルダ `/ (root)` を選んで保存してください。
 数分後に `https://hisako-arato.github.io/Cafe/` で遊べるようになります。
 
+## スマホにアプリとして入れる（PWA）
+
+GitHub Pages で公開したページを開き、次の方法でホーム画面に追加します。
+追加したあとはアイコンから全画面で起動でき、オフラインでも遊べます。
+
+- **iPhone / iPad**：Safari で開く → 共有ボタン → 「ホーム画面に追加」
+- **Android**：Chrome で開く → メニュー（︙）→ 「アプリをインストール」または「ホーム画面に追加」
+- **パソコン**：Chrome / Edge で開く → アドレスバー右端のインストールボタン
+
+ゲームを更新したときは `sw.js` の `CACHE` の番号（`eikyu-cafe-v1` → `v2`）を上げてください。
+
 ## ファイル構成
 
 | ファイル | 内容 |
@@ -29,3 +40,6 @@ GitHub Pages で公開する場合は、リポジトリの **Settings → Pages*
 | `index.html` | 画面の骨組み |
 | `style.css` | 見た目 |
 | `game.js` | ゲームのロジック・描画・保存 |
+| `manifest.webmanifest` | アプリ名・アイコンなど PWA の設定 |
+| `sw.js` | オフラインで遊ぶためのサービスワーカー |
+| `icons/` | アプリのアイコン |
