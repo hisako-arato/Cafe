@@ -130,47 +130,29 @@ button {
   box-shadow: 0 0 0 3px #2a0a6e, 0 10px 24px rgba(20, 0, 60, .45);
 }
 
-/* 床は空いている場所いっぱいに 10:9 で収める */
-.floor-box {
-  /* 横幅いっぱいの高さを基本にし、画面が低いときだけ縮める */
-  flex: 0 1 auto;
-  height: calc((min(100vw, 720px) - 32px) * .9);
-  min-height: 0;
-  display: flex; align-items: center; justify-content: center;
-  container-type: size;
-}
+/* カフェ画面は余白なしで床を画面いっぱいに */
+#scr-cafe { padding: 0; }
 
-.cafe-bar { flex: none; display: flex; gap: 8px; }
-.pill-btn {
-  flex: 1;
-  border: 2px solid #fff;
-  border-radius: 14px;
-  padding: 8px;
-  background: linear-gradient(#a855f7, #7c3aed);
-  color: #fff;
-  font-weight: 900;
-  box-shadow: 0 3px 0 #4c1d95;
-  text-shadow: 0 1px 0 #4c1d95;
-}
-.pill-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #4c1d95; }
-.pill-btn b { font-size: .8rem; opacity: .9; }
-
-/* メッセージウィンドウ（ここだけスクロールできる） */
+/* メッセージウィンドウ（床の上に重ねる。ここだけスクロールできる） */
 .log-window {
-  flex: 1 1 90px;
-  min-height: 84px;
+  position: absolute;
+  left: 2.5%; right: 14%; bottom: 2%;
+  height: clamp(74px, 15%, 132px);
+  z-index: 500;
   display: flex; flex-direction: column;
-  background: rgba(20, 6, 60, .72);
-  border: 2px solid rgba(255,255,255,.85);
+  background: rgba(32, 16, 40, .66);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border: 1.5px solid rgba(255,255,255,.6);
   border-radius: 14px;
   color: #fff;
   overflow: hidden;
 }
 .log-title {
   flex: none;
-  font-size: .78rem; font-weight: 900;
-  padding: 5px 10px 3px;
-  border-bottom: 1px solid rgba(255,255,255,.2);
+  font-size: .74rem; font-weight: 900;
+  padding: 4px 10px 2px;
+  border-bottom: 1px solid rgba(255,255,255,.18);
   display: flex; justify-content: space-between; gap: 6px; white-space: nowrap;
 }
 .log-title span { font-weight: 500; opacity: .7; overflow: hidden; text-overflow: ellipsis; }
@@ -179,12 +161,12 @@ button {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: 4px 10px 6px;
-  font-size: .8rem; line-height: 1.55;
+  padding: 2px 10px 4px;
+  font-size: .76rem; line-height: 1.5;
 }
 .log p { margin: 0; padding: 2px 0; border-bottom: 1px dashed rgba(255,255,255,.12); }
 .log p.big { color: #fde047; font-weight: 900; }
-.log time { opacity: .55; font-size: .7rem; margin-right: 6px; }
+.log time { opacity: .55; font-size: .68rem; margin-right: 6px; }
 
 /* 下部ナビ */
 #bottomNav {
@@ -214,60 +196,107 @@ button {
 }
 .nav-btn .dot[hidden] { display: none; }
 
-/* ---------- Floor ---------- */
+/* ---------- カフェの床 ---------- */
 #floor {
   position: relative;
-  width: min(100cqw, 100cqh * 10 / 9);
-  aspect-ratio: 10 / 9;
-  border-radius: 20px;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  border: 4px solid #fff;
-  box-shadow: 0 0 0 3px #2a0a6e, 0 10px 24px rgba(20, 0, 60, .45);
+  border-top: 3px solid #2a0a6e;
   background:
-    linear-gradient(rgba(255,255,255,.08), transparent 30%),
-    repeating-linear-gradient(90deg, var(--wood1) 0 9%, var(--wood2) 9% 9.4%),
-    var(--wood1);
+    radial-gradient(ellipse at 50% 60%, transparent 55%, rgba(60, 30, 10, .22)),
+    repeating-conic-gradient(#efe2cc 0 25%, #d9c09c 0 50%) 0 0 / 9cqw 9cqw;
   container-type: inline-size;
   /* 床の中の重なり順をポップアップと混ぜない */
   isolation: isolate;
 }
 
+/* 壁 */
+.wall {
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 26cqw;
+  background:
+    linear-gradient(transparent 62%, #6b4428 62% 64%, #8a5a36 64% 96%, #5b3a24 96%),
+    repeating-linear-gradient(90deg, #4f7a62 0 3cqw, #5c8a70 3cqw 6cqw);
+  box-shadow: 0 1cqw 1.5cqw rgba(0,0,0,.18);
+  z-index: 1;
+}
+.window {
+  position: absolute; top: 2cqw;
+  width: 13cqw; height: 11cqw;
+  border: 1cqw solid #f8f1e3;
+  border-radius: 6.5cqw 6.5cqw 1cqw 1cqw;
+  background:
+    linear-gradient(90deg, transparent 47%, #f8f1e3 47% 53%, transparent 53%),
+    linear-gradient(transparent 55%, #f8f1e3 55% 60%, transparent 60%),
+    linear-gradient(#9fd7ff, #d9f0ff 70%, #c9e8b0 71%);
+  box-shadow: inset 0 0 2cqw rgba(255,255,255,.6), 0 .6cqw 0 rgba(0,0,0,.2);
+}
+.window.w1 { left: 4%; }
+.window.w2 { left: 67%; }
+.board {
+  position: absolute; left: 31%; top: 1.5cqw;
+  width: 22cqw; height: 13cqw;
+  background: #2f3a33;
+  border: .9cqw solid #a8743f;
+  border-radius: 1cqw;
+  box-shadow: 0 .6cqw 0 rgba(0,0,0,.25);
+  color: #f6f1e7;
+  font-size: 1.55cqw; line-height: 1.35;
+  padding: .6cqw 1.2cqw;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.board b { text-align: center; font-size: 2cqw; letter-spacing: .3em; color: #ffe8a3; }
+.board span { display: flex; justify-content: space-between; white-space: nowrap; }
+.board em { font-style: normal; color: #ffe8a3; margin-left: 1cqw; }
+
+/* カウンター（大理石の天板のバー） */
 .counter {
   position: absolute;
-  left: 3%; top: 2.5%; width: 56%; height: 12%;
-  background: linear-gradient(#7a4b2c, #5e3920);
-  border-radius: 10px;
-  border: 2px solid #3e2414;
-  box-shadow: 0 4px 0 #3e2414, inset 0 2px 0 rgba(255,255,255,.2);
+  left: 2%; top: 14cqw; width: 57%; height: 12cqw;
+  background:
+    linear-gradient(#f4f1ec, #dcd6cc 18%, transparent 18%),
+    repeating-linear-gradient(90deg, #6b4428 0 5cqw, #5b3a24 5cqw 5.3cqw),
+    #6b4428;
+  border: 2px solid #2b1d33;
+  border-radius: 1.4cqw 1.4cqw .6cqw .6cqw;
+  box-shadow: 0 1cqw 0 rgba(0,0,0,.25);
   color: #fff;
-  display: flex; align-items: center; gap: 2cqw;
-  padding: 0 2cqw;
+  display: flex; align-items: center; gap: 1.6cqw;
+  padding: 2.4cqw 2cqw 0;
   overflow: hidden;
-  font-size: 2.4cqw;
-  z-index: 2;
+  z-index: 3;
 }
-.counter .label { opacity: .7; font-size: 1.8cqw; font-weight: 900; letter-spacing: .08em; }
-.counter .stack { display: flex; align-items: center; gap: .3cqw; font-size: 4cqw; }
-.counter .stack small { font-size: 2.4cqw; font-weight: 900; }
-.counter .empty { opacity: .75; }
+.counter .label {
+  font-size: 1.5cqw; font-weight: 900; letter-spacing: .15em;
+  background: #2b1d33; color: #ffe8a3; border-radius: .8cqw; padding: .3cqw 1cqw;
+}
+.counter .stack {
+  display: flex; align-items: center; gap: .3cqw; font-size: 4.2cqw;
+  background: rgba(255,255,255,.14); border-radius: 1.2cqw; padding: .2cqw .8cqw;
+}
+.counter .stack small { font-size: 2.3cqw; font-weight: 900; }
+.counter .empty { font-size: 2.2cqw; opacity: .8; }
 
+/* 厨房の窓口（コンロ） */
 .mini-stoves {
   position: absolute;
-  left: 62%; top: 2.5%; width: 35%; height: 12%;
-  background: linear-gradient(#cfc8d8, #aaa2b8);
-  border-radius: 10px;
-  border: 2px solid #6e6680;
-  box-shadow: 0 4px 0 #6e6680;
+  left: 62%; top: 14cqw; width: 35.5%; height: 12cqw;
+  background: linear-gradient(#e5e7eb, #b8bcc4);
+  border: 2px solid #2b1d33;
+  border-radius: 1.4cqw;
+  box-shadow: 0 1cqw 0 rgba(0,0,0,.25);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-auto-rows: 1fr;
   gap: .6cqw;
-  padding: .6cqw;
-  z-index: 2;
+  padding: .7cqw;
+  z-index: 3;
 }
 .mini-stove {
-  border: 0; border-radius: 6px;
-  background: #3f3a4a;
+  border: 0; border-radius: .8cqw;
+  background: #2f2b36;
   display: grid; place-items: center;
   font-size: 2.8cqw;
   padding: 0;
@@ -281,24 +310,58 @@ button {
 .mini-stove .fill { position: absolute; left: 0; bottom: 0; height: 14%; background: #ff8a3d; }
 .mini-stove.waiting .fill { background: #9ca3af; }
 
+/* 入口 */
 .door {
-  position: absolute; right: 1%; bottom: 0;
-  font-size: 6cqw; line-height: 1;
+  position: absolute; right: 1.5%; bottom: 0;
+  width: 10cqw; height: 15cqw;
+  background:
+    linear-gradient(90deg, transparent 15%, rgba(190, 230, 255, .75) 15% 85%, transparent 85%) 0 2cqw / 100% 5cqw no-repeat,
+    linear-gradient(#8a5a36, #6b4428);
+  border: 2px solid #2b1d33; border-bottom: 0;
+  border-radius: 1.5cqw 1.5cqw 0 0;
+  z-index: 2;
 }
-.decor-row {
-  position: absolute; left: 1%; bottom: 1%; right: 10%;
-  display: flex; flex-wrap: wrap-reverse; gap: .5cqw;
-  font-size: 3.4cqw; pointer-events: none;
+.open-sign {
+  position: absolute; left: 50%; top: 8cqw; transform: translateX(-50%);
+  background: #fff7e6; color: #b91c1c; border: 1.5px solid #2b1d33;
+  font-size: 1.5cqw; font-weight: 900; padding: 0 .8cqw; border-radius: .6cqw;
 }
 
+/* 内装 */
+.pendant, .frame, .chandelier, .plant, .record { position: absolute; transform: translateX(-50%); pointer-events: none; }
+.pendant { width: 5cqw; height: 9cqw; z-index: 4; }
+.pendant::before { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 5cqw; background: #2b1d33; }
+.pendant::after {
+  content: ""; position: absolute; left: 0; top: 5cqw; width: 5cqw; height: 2.6cqw;
+  background: #d9a441; border: 1.5px solid #2b1d33; border-radius: 2.5cqw 2.5cqw .4cqw .4cqw;
+  box-shadow: 0 2cqw 3cqw 1cqw rgba(255, 220, 140, .55);
+}
+.frame {
+  width: 5.5cqw; height: 5cqw; transform: translate(-50%, -50%); z-index: 2;
+  border: .7cqw solid #c8963e; border-radius: .4cqw; box-shadow: 0 .4cqw 0 rgba(0,0,0,.25);
+  background: linear-gradient(160deg, #fde68a, #f472b6 50%, #60a5fa);
+}
+.frame.f1 { background: linear-gradient(200deg, #bbf7d0, #22c55e 55%, #0ea5e9); }
+.frame.f2 { background: radial-gradient(circle at 60% 40%, #fff 0 15%, #fca5a5 16% 40%, #7c3aed 41%); }
+.frame.f3 { background: linear-gradient(#93c5fd 50%, #f59e0b 50%); }
+.chandelier { width: 12cqw; height: 8cqw; z-index: 4; display: flex; justify-content: space-between; align-items: flex-end; }
+.chandelier::before { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 3cqw; background: #2b1d33; }
+.chandelier::after { content: ""; position: absolute; left: 5%; right: 5%; top: 3cqw; height: 2cqw; border: 2px solid #c8963e; border-top: 0; border-radius: 0 0 6cqw 6cqw; }
+.chandelier i { width: 2.4cqw; height: 2.4cqw; border-radius: 50%; background: #fff3c4; box-shadow: 0 0 2cqw 1cqw rgba(255, 230, 150, .8); }
+.plant, .record { transform: translate(-50%, -100%); font-size: 6cqw; line-height: 1; z-index: 8; filter: drop-shadow(0 .6cqw 0 rgba(0,0,0,.2)); }
+.record { font-size: 5cqw; }
+
+/* テーブル（大理石）と椅子 */
 .table {
   position: absolute;
-  width: 12cqw; height: 9cqw;
+  width: 12cqw; height: 8.5cqw;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(ellipse at 45% 35%, #fff 0 45%, #ece3f7 75%);
+  background:
+    linear-gradient(115deg, transparent 40%, rgba(160,160,170,.25) 42%, transparent 46%),
+    radial-gradient(ellipse at 45% 35%, #fff 0 45%, #e7e5e4 80%);
   border: 2px solid #2b1d33;
-  box-shadow: 0 1cqw 0 #8b5e3c, 0 1.6cqw 0 rgba(0,0,0,.15);
+  box-shadow: 0 1.2cqw 0 #3f2a1c, 0 2cqw 1cqw rgba(0,0,0,.18);
   display: grid; place-items: center;
   font-size: 4.5cqw;
 }
@@ -309,6 +372,8 @@ button {
   background: radial-gradient(circle at 30% 60%, rgba(120,80,40,.35) 0 12%, transparent 13%),
               radial-gradient(circle at 70% 30%, rgba(120,80,40,.3) 0 10%, transparent 11%);
 }
+.chair { position: absolute; width: 7cqw; transform: translate(-50%, -96%); pointer-events: none; }
+.chair svg { width: 100%; height: auto; }
 
 /* 人物（座標は足元） */
 .person {
@@ -557,3 +622,34 @@ button {
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .stat-grid div { background: var(--panel-2); border-radius: 10px; padding: 8px 10px; font-size: .8rem; color: var(--muted); }
 .stat-grid b { display: block; font-size: 1.1rem; color: var(--ink); }
+
+/* 厨房（メニュー画面）のタブ */
+.seg {
+  position: sticky; top: -12px; z-index: 5;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  margin: -12px -12px 10px; padding: 12px 12px 8px;
+  background: var(--panel);
+  border-bottom: 2px solid var(--line);
+}
+.seg-btn {
+  position: relative;
+  border: 2px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 8px 4px;
+  font-weight: 900;
+  color: var(--muted);
+}
+.seg-btn.active {
+  background: linear-gradient(#a855f7, #7c3aed);
+  color: #fff;
+  border-color: #5b21b6;
+  box-shadow: 0 3px 0 #4c1d95;
+  text-shadow: 0 1px 0 #4c1d95;
+}
+.seg-btn .dot {
+  position: absolute; top: -4px; right: -4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--warn); border: 2px solid #fff;
+}
+.seg-btn .dot[hidden] { display: none; }

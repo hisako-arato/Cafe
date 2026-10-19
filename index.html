@@ -31,29 +31,36 @@
     </header>
 
     <main id="screens">
-      <!-- カフェ画面 -->
+      <!-- カフェ画面（お店の様子だけを画面いっぱいに表示） -->
       <section id="scr-cafe" class="screen active">
-        <div class="floor-box">
-          <div id="floor">
-            <div id="counter" class="counter"></div>
-            <div id="miniStoves" class="mini-stoves"></div>
-            <div id="door" class="door">🚪</div>
-            <div id="decorRow" class="decor-row"></div>
+        <div id="floor">
+          <div class="wall">
+            <div class="window w1"></div>
+            <div class="board" id="board"></div>
+            <div class="window w2"></div>
           </div>
-        </div>
-        <div class="cafe-bar">
-          <button class="pill-btn" data-action="sheet" data-sheet="staff">👥 スタッフ <b id="staffCount"></b></button>
-          <button class="pill-btn" data-action="sheet" data-sheet="shop">🛒 ショップ</button>
-        </div>
-        <div class="log-window">
-          <div class="log-title">📢 お店のできごと <span>お客さんをタップするとスカウトできます</span></div>
-          <div id="log" class="log"></div>
+          <div id="wallDecor"></div>
+          <div id="counter" class="counter"></div>
+          <div id="miniStoves" class="mini-stoves"></div>
+          <div id="floorDecor"></div>
+          <div class="door"><span class="open-sign">OPEN</span></div>
+          <div class="log-window">
+            <div class="log-title">📢 お店のできごと <span>お客さんをタップでスカウト</span></div>
+            <div id="log" class="log"></div>
+          </div>
         </div>
       </section>
 
-      <!-- 厨房画面 -->
+      <!-- 厨房画面（メニュー画面：調理・スタッフ・ショップ） -->
       <section id="scr-kitchen" class="screen">
-        <div class="scroll" id="kitchen"></div>
+        <div class="scroll">
+          <nav class="seg">
+            <button class="seg-btn active" data-action="ktab" data-ktab="cook">🍳 調理<b class="dot" id="cookDot" hidden></b></button>
+            <button class="seg-btn" data-action="ktab" data-ktab="staff">👥 スタッフ</button>
+            <button class="seg-btn" data-action="ktab" data-ktab="shop">🛒 ショップ</button>
+          </nav>
+          <div id="kitchen"></div>
+        </div>
       </section>
 
       <!-- 設定画面 -->

@@ -44,13 +44,9 @@ const NATIONS = {
     f: ['ズザンナ', 'ユリア', 'ゾフィア', 'マヤ', 'アレクサンドラ', 'アガタ', 'オリヴィア'] },
 };
 
-// 床の座標はすべて % 単位（人物は足元の位置）
-const TABLE_POS = [
-  { x: 15, y: 48 }, { x: 38, y: 48 }, { x: 61, y: 48 }, { x: 84, y: 48 },
-  { x: 15, y: 77 }, { x: 38, y: 77 }, { x: 61, y: 77 }, { x: 84, y: 77 },
-];
-const COUNTER_SPOT = { x: 30, y: 25 };
-const DOOR = { x: 95, y: 99 };
+// 床の座標はすべて % 単位（人物は足元の位置）。
+// 縦方向は床の縦横比で変わるので、レイアウトは computeLayout() で計算する。
+const L = { r: 0.9, ver: 0 };
 
 // ===== 状態 =====
 function newGame() {
@@ -187,15 +183,37 @@ const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.0
 const roleOf = s => s.owner ? 'owner' : s.type;
 const displayName = p => p.owner ? p.name : p.name + 'さん';
 
-const seatPos = ti => ({ x: TABLE_POS[ti].x - 9, y: TABLE_POS[ti].y + 3 });
-const standPos = ti => ({ x: TABLE_POS[ti].x + 9, y: TABLE_POS[ti].y + 3 });
+// 横幅に対する % を、縦の % に直す
+const u = v => v / L.r;
+
+function computeLayout() {
+  const el = document.getElementById('floor');
+  const w = el.clientWidth, h = el.clientHeight;
+  if (w && h) L.r = h / w;
+  const log = el.querySelector('.log-window');
+  const logTop = log && h ? log.offsetTop / h * 100 : 86;
+  const cols = L.r >= 1.15 ? 3 : 4;
+  const xs = cols === 3 ? [18, 50, 82] : [14, 38, 62, 86];
+  const rows = Math.ceil(MAX_TABLES / cols);
+  const top = L.r >= 1.15 ? u(64) : u(56);
+  const bottom = Math.max(top, logTop - u(7));
+  const gap = rows > 1 ? (bottom - top) / (rows - 1) : 0;
+  L.tables = Array.from({ length: MAX_TABLES }, (_, i) => ({ x: xs[i % cols], y: top + Math.floor(i / cols) * gap }));
+  L.counter = { x: 30, y: u(33) };
+  L.door = { x: 95, y: 99 };
+  L.ver++;
+}
+computeLayout();
+
+const seatPos = ti => ({ x: L.tables[ti].x - 9, y: L.tables[ti].y + u(3) });
+const standPos = ti => ({ x: L.tables[ti].x + 9, y: L.tables[ti].y + u(3) });
 function stovePos(i) {
   const col = i % 3, row = Math.floor(i / 3);
-  return { x: 62 + 35 * (col + 0.5) / 3 + row * 2.5, y: 25 + row * 6 };
+  return { x: 62 + 35 * (col + 0.5) / 3 + row * 2.5, y: u(39 + row * 4) };
 }
 function homeOf(s, idx) {
   const i = idx ?? S.staff.indexOf(s);
-  return { x: 6 + (i % 7) * 8, y: 35 + Math.floor(i / 7) * 6 };
+  return { x: 6 + (i % 7) * 8, y: u(41 + Math.floor(i / 7) * 5) };
 }
 
 function stoveInfo(i) {
@@ -397,7 +415,7 @@ function spawnCustomer() {
   if (ti < 0) return false;
   const c = {
     id: uid++, ...randomPerson(), stars: rollStars(),
-    x: DOOR.x, y: DOOR.y, table: ti, state: 'in',
+    x: L.door.x, y: L.door.y, table: ti, state: 'in',
     patience: PATIENCE_SEC, server: null, dish: null, eat: 0, flip: true,
   };
   tables[ti].state = 'occupied';
@@ -494,7 +512,7 @@ function update(dt) {
         addXp(1);
       }
     } else if (c.state === 'out') {
-      if (moveTo(c, DOOR, CUST_SPEED * dt)) c.gone = true;
+      if (moveTo(c, L.door, CUST_SPEED * dt)) c.gone = true;
     }
   }
   customers = customers.filter(c => !c.gone);
@@ -515,7 +533,7 @@ function update(dt) {
       const c = customers.find(c => c.id === k.cid);
       if (!c || c.state !== 'wait') { cancelTaskOf(s); return; }
       if (k.phase === 'counter') {
-        if (moveTo(s, COUNTER_SPOT, step)) k.phase = 'table';
+        if (moveTo(s, L.counter, step)) k.phase = 'table';
       } else if (moveTo(s, standPos(c.table), step)) {
         c.state = 'eat';
         c.dish = k.dish;
@@ -581,6 +599,11 @@ function place(el, x, y) {
   el.style.top = y + '%';
 }
 
+const CHAIR_SVG = `<svg viewBox="0 0 40 52" aria-hidden="true"><g stroke="#2b1d33" stroke-width="2" stroke-linejoin="round">
+  <rect x="9" y="38" width="4" height="12" rx="1.5" fill="#5b3a24"/><rect x="27" y="38" width="4" height="12" rx="1.5" fill="#5b3a24"/>
+  <rect x="7" y="2" width="26" height="26" rx="9" fill="#7c4a2d"/><rect x="11" y="6" width="18" height="18" rx="6" fill="#c0703c"/>
+  <rect x="4" y="28" width="32" height="10" rx="4" fill="#c0703c"/></g></svg>`;
+
 const PERSON_HTML = '<div class="bubble"></div><div class="sprite"></div><div class="carry"></div><div class="tag"></div>';
 
 function placePerson(el, p, role) {
@@ -599,10 +622,14 @@ function renderFloor() {
 
   tables.forEach((t, i) => {
     const el = floorEl('t' + i, 'table', '');
-    if (!el._placed) {
-      el._placed = true;
-      place(el, TABLE_POS[i].x, TABLE_POS[i].y);
-      el.style.zIndex = 10 + TABLE_POS[i].y;
+    const chair = floorEl('ch' + i, 'chair', CHAIR_SVG);
+    if (el._ver !== L.ver) {
+      el._ver = L.ver;
+      const p = L.tables[i], sp = seatPos(i);
+      place(el, p.x, p.y);
+      el.style.zIndex = 10 + Math.round(p.y);
+      place(chair, sp.x, sp.y);
+      chair.style.zIndex = 9 + Math.round(sp.y);
     }
     const c = t.cust != null ? customers.find(c => c.id === t.cust) : null;
     const content = t.state === 'dirty' ? '🍽️' : (c && c.state === 'eat' ? DISH[c.dish].emoji : '');
@@ -683,10 +710,24 @@ function renderFloor() {
     if (f) f.style.width = (s.ratio * 100).toFixed(1) + '%';
   });
 
-  // 内装
-  const decorKey = DECOR.map(d => S.decor[d.id] || 0).join(',');
-  setKeyed($('decorRow'), 'decor', decorKey,
-    DECOR.flatMap(d => Array(Math.min(4, S.decor[d.id] || 0)).fill(`<span>${d.emoji}</span>`)).join(''));
+  // 内装（壁と床の決まった場所に飾る）
+  const decorKey = DECOR.map(d => S.decor[d.id] || 0).join(',') + '|' + L.ver;
+  const n = id => Math.min(4, S.decor[id] || 0);
+  const at = (cls, x, y, html = '') => `<div class="${cls}" style="left:${x}%;top:${y}%">${html}</div>`;
+  setKeyed($('wallDecor'), 'wallDecor', decorKey, [
+    ...[11, 26, 72, 88].slice(0, n('lamp')).map(x => at('pendant', x, 0)),
+    ...[22.5, 58.5, 84.5, 93].slice(0, n('painting')).map((x, i) => at('frame f' + i, x, u(5.5))),
+    ...(n('chandelier') ? [at('chandelier', 60, 0, '<i></i><i></i><i></i>')] : []),
+  ].join(''));
+  setKeyed($('floorDecor'), 'floorDecor', decorKey, [
+    ...[[4, u(32)], [59.5, u(32)], [96, u(46)], [96, 99 - u(15)]].slice(0, n('plant')).map(([x, y]) => at('plant', x, y, '🪴')),
+    ...(n('jukebox') ? [at('record', 4.5, u(47), '📻')] : []),
+  ].join(''));
+
+  // メニュー黒板
+  const menu = DISHES.filter(d => d.level <= S.level).slice(-4);
+  setKeyed($('board'), 'board', menu.map(d => d.id).join(','),
+    '<b>MENU</b>' + menu.map(d => `<span>${d.emoji} ${d.name}<em>${yen(d.price)}</em></span>`).join(''));
 }
 
 function floatText(text, x, y, bad) {
@@ -700,7 +741,7 @@ function floatText(text, x, y, bad) {
 
 // ===== 描画：HUD とパネル =====
 let currentScreen = 'cafe';
-let currentSheet = null;
+let kitchenTab = 'cook';
 
 function card(p, role, stars) {
   return `<div class="card r${stars}">${Chara.portrait(p.look, role)}</div>`;
@@ -712,16 +753,16 @@ function renderHud() {
   $('xpbar').style.width = Math.min(100, S.xp / xpNeeded(S.level) * 100) + '%';
   $('contracts').textContent = S.contracts;
   $('pop').textContent = popularity();
-  $('staffCount').textContent = `${S.staff.length}/${staffCap()}`;
-  $('kitchenDot').hidden = !S.stoves.some((_, i) => stoveInfo(i).kind === 'ready');
+  const ready = S.stoves.some((_, i) => stoveInfo(i).kind === 'ready');
+  $('kitchenDot').hidden = !ready;
+  $('cookDot').hidden = !ready;
 }
 
-function renderKitchen() {
-  const el = $('kitchen');
+function renderCook(el) {
   const infos = S.stoves.map((_, i) => stoveInfo(i));
   const key = S.stoves.map((st, i) => [infos[i].kind, st.dish, infos[i].cook?.id].join(':')).join(',');
   const counterKey = S.counter.map(c => c.dish + c.n).join(',');
-  setKeyed(el, 'kitchen', key + '|' + counterKey, `
+  setKeyed(el, 'cook', key + '|' + counterKey, `
     <h3>カウンターの料理</h3>
     <div class="counter-line">${S.counter.length
       ? S.counter.map(c => `<span class="chip">${DISH[c.dish].emoji} ${DISH[c.dish].name} ×${c.n}</span>`).join('')
@@ -859,10 +900,15 @@ function renderSettings() {
 
 function renderUI() {
   renderHud();
-  if (currentScreen === 'kitchen') renderKitchen();
+  if (currentScreen === 'kitchen') ({ cook: renderCook, staff: renderStaff, shop: renderShop })[kitchenTab]($('kitchen'));
   if (currentScreen === 'settings') renderSettings();
-  const sheetBody = currentSheet && $('sheetBody');
-  if (sheetBody) (currentSheet === 'staff' ? renderStaff : renderShop)(sheetBody);
+}
+
+function setKitchenTab(tab) {
+  kitchenTab = tab;
+  document.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.ktab === tab));
+  keys.cook = keys.staff = keys.shop = undefined;
+  renderUI();
 }
 
 function setScreen(name) {
@@ -875,22 +921,12 @@ function setScreen(name) {
 
 // ===== モーダル =====
 function openModal(html) {
-  currentSheet = null;
   $('sheet').innerHTML = html;
   $('modal').hidden = false;
 }
 function closeModal() {
-  currentSheet = null;
   $('modal').hidden = true;
   $('sheet').innerHTML = '';
-}
-
-function openSheet(name) {
-  openModal(`<div class="sheet-head"><h2>${name === 'staff' ? '👥 スタッフ' : '🛒 ショップ'}</h2>
-    <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
-    <div id="sheetBody"></div>`);
-  currentSheet = name;
-  delete keys[name];
 }
 
 // 閉じていた間の報告
@@ -969,7 +1005,7 @@ function openHelp() {
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
-      <li><b>☕ カフェ</b>画面の「スタッフ」で契約、「ショップ」で<b>コンロ・テーブル・内装</b>を買えます。データは自動で保存されます。</li>
+      <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約、「ショップ」で<b>コンロ・テーブル・内装</b>を買えます。データは自動で保存されます。</li>
     </ul>
     <div class="actions"><button class="btn" data-action="close">はじめる</button></div>`);
 }
@@ -995,7 +1031,7 @@ function addLog(text, big) {
 // 大事なことと、カフェ画面以外にいるときはポップアップでも知らせる
 function toast(text, big) {
   addLog(text, big);
-  if (!big && currentScreen === 'cafe' && !currentSheet) return;
+  if (!big && currentScreen === 'cafe' && $('modal').hidden) return;
   showToast(text, big);
 }
 
@@ -1019,7 +1055,7 @@ document.addEventListener('click', e => {
   const d = el.dataset;
   switch (d.action) {
     case 'screen': closeModal(); setScreen(d.screen); break;
-    case 'sheet': openSheet(d.sheet); break;
+    case 'ktab': setKitchenTab(d.ktab); break;
     case 'pick': openDishPicker(+d.i); break;
     case 'cook': orderDish(+d.i, d.dish); break;
     case 'collect': collectStove(+d.i); break;
@@ -1076,6 +1112,8 @@ function frame(t) {
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* 登録できなくてもゲームは遊べる */ });
 }
+
+new ResizeObserver(() => computeLayout()).observe(floor);
 
 const offlineReport = applyOffline();
 initRuntime();
