@@ -6,6 +6,7 @@ const CONTRACT_SEC = 300;   // アルバイトの契約期間（秒）
 const PATIENCE_SEC = 45;    // お客さんが料理を待てる時間（秒）
 const EAT_SEC = 4;          // 食事にかかる時間（秒）
 const CUST_SPEED = 22;      // お客さんの歩く速さ（%/秒）
+const CHEAPEST_RATE = 0.8;  // お客さんが一番安い料理を頼む確率
 const MAX_STOVES = 6;
 const MAX_TABLES = 8;
 
@@ -21,24 +22,35 @@ const DISHES = [
 const DISH = Object.fromEntries(DISHES.map(d => [d.id, d]));
 
 const DECOR = [
-  { id: 'plant',      name: '観葉植物',         emoji: '🪴', price: 80,   pop: 1 },
-  { id: 'lamp',       name: 'おしゃれなランプ', emoji: '💡', price: 200,  pop: 3 },
-  { id: 'painting',   name: '絵画',             emoji: '🖼️', price: 450,  pop: 6 },
-  { id: 'jukebox',    name: 'レコードプレーヤー', emoji: '📻', price: 900, pop: 10 },
-  { id: 'chandelier', name: 'シャンデリア',     emoji: '✨', price: 2000, pop: 18 },
+  { id: 'plant',      name: '観葉植物',           emoji: '🪴', price: 80,   pop: 1 },
+  { id: 'lamp',       name: 'おしゃれなランプ',   emoji: '💡', price: 200,  pop: 3 },
+  { id: 'painting',   name: '絵画',               emoji: '🖼️', price: 450,  pop: 6 },
+  { id: 'jukebox',    name: 'レコードプレーヤー', emoji: '📻', price: 900,  pop: 10 },
+  { id: 'chandelier', name: 'シャンデリア',       emoji: '✨', price: 2000, pop: 18 },
 ];
 
-const SURNAMES = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤',
-  '吉田', '山田', '佐々木', '山口', '松本', '井上', '木村', '林', '斎藤', '清水', '比嘉', '金城', '新垣', '荒戸'];
-const FACES = ['🧑', '👩', '👨', '🧓', '👵', '👴', '👩‍🦰', '👨‍🦱', '👱‍♀️', '🧔', '👩‍🎓', '🧑‍💼', '👨‍🦳', '👩‍🦱'];
+const NATIONS = {
+  de: { flag: '🇩🇪', name: 'ドイツ',
+    m: ['ルーカス', 'レオン', 'フェリックス', 'マクシミリアン', 'ヨナス', 'パウル', 'ルートヴィヒ', 'エリアス'],
+    f: ['ハンナ', 'レナ', 'クララ', 'ミア', 'エマ', 'ゾフィー', 'リーナ', 'グレタ'] },
+  it: { flag: '🇮🇹', name: 'イタリア',
+    m: ['ロレンツォ', 'マッテオ', 'レオナルド', 'アレッサンドロ', 'ジョヴァンニ', 'ダンテ', 'フランチェスコ'],
+    f: ['ジュリア', 'ソフィア', 'キアラ', 'フランチェスカ', 'ビアンカ', 'アウローラ', 'ベアトリーチェ'] },
+  gb: { flag: '🇬🇧', name: 'イギリス',
+    m: ['オリバー', 'ジョージ', 'アーサー', 'ハリー', 'エドワード', 'ウィリアム', 'セオドア'],
+    f: ['アメリア', 'シャーロット', 'イザベラ', 'エミリー', 'グレース', 'アリス', 'フローレンス'] },
+  pl: { flag: '🇵🇱', name: 'ポーランド',
+    m: ['ヤクプ', 'カツペル', 'フィリプ', 'シモン', 'ミコワイ', 'アントニ', 'ヴォイチェフ'],
+    f: ['ズザンナ', 'ユリア', 'ゾフィア', 'マヤ', 'アレクサンドラ', 'アガタ', 'オリヴィア'] },
+};
 
-// 床の座標はすべて % 単位
+// 床の座標はすべて % 単位（人物は足元の位置）
 const TABLE_POS = [
-  { x: 15, y: 44 }, { x: 38, y: 44 }, { x: 61, y: 44 }, { x: 84, y: 44 },
-  { x: 15, y: 74 }, { x: 38, y: 74 }, { x: 61, y: 74 }, { x: 84, y: 74 },
+  { x: 15, y: 48 }, { x: 38, y: 48 }, { x: 61, y: 48 }, { x: 84, y: 48 },
+  { x: 15, y: 77 }, { x: 38, y: 77 }, { x: 61, y: 77 }, { x: 84, y: 77 },
 ];
-const COUNTER_SPOT = { x: 30, y: 22 };
-const DOOR = { x: 95, y: 97 };
+const COUNTER_SPOT = { x: 30, y: 25 };
+const DOOR = { x: 95, y: 99 };
 
 // ===== 状態 =====
 function newGame() {
@@ -48,15 +60,21 @@ function newGame() {
     xp: 0,
     contracts: 1,
     contractsBought: 0,
-    stoves: [{ dish: null, start: 0 }, { dish: null, start: 0 }],
+    stoves: [newStove(), newStove()],
     tableCount: 2,
     decor: {},
     counter: [],
-    staff: [{ id: 1, name: '店長', emoji: '🧑‍🍳', stars: 3, type: 'perm', expireAt: 0, owner: true }],
+    staff: [{ id: 1, name: '店長', g: 'm', nation: null, look: Chara.OWNER_LOOK,
+      stars: 3, type: 'perm', expireAt: 0, owner: true }],
     nextId: 2,
     stats: { served: 0, hired: 0, promoted: 0 },
     seenHelp: false,
+    savedAt: Date.now(),
   };
+}
+
+function newStove() {
+  return { dish: null, progress: 0, duration: 0, cook: null };
 }
 
 let S = load();
@@ -66,20 +84,54 @@ let spawnTimer = 3;
 let uid = 1;
 
 function load() {
+  let s = newGame();
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) return Object.assign(newGame(), JSON.parse(raw));
+    if (raw) s = Object.assign(newGame(), JSON.parse(raw));
   } catch (e) { /* 保存データが読めなくても新規で始める */ }
-  return newGame();
+  return migrate(s);
+}
+
+// 古い保存データを今の形にそろえる
+function migrate(s) {
+  const now = Date.now();
+  s.stoves = s.stoves.map(st => {
+    if ('duration' in st) return st;
+    if (!st.dish) return newStove();
+    const duration = DISH[st.dish].time * 1000;
+    return { dish: st.dish, progress: Math.min(duration, now - st.start), duration, cook: null };
+  });
+  for (const m of s.staff) {
+    if (m.look) continue;
+    if (m.owner) { m.look = Chara.OWNER_LOOK; m.g = 'm'; continue; }
+    const p = randomPerson();
+    Object.assign(m, { name: p.name, g: p.g, nation: p.nation, look: p.look });
+  }
+  return s;
 }
 
 function save() {
+  S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, emoji, stars, type, expireAt, owner }) =>
-      ({ id, name, emoji, stars, type, expireAt, owner })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
+}
+
+// 閉じていた間も、調理担当がいたコンロは調理を進める
+function applyOffline() {
+  const now = Date.now();
+  const since = S.savedAt || now;
+  for (const st of S.stoves) {
+    if (!st.dish || st.cook == null) continue;
+    const cook = S.staff.find(s => s.id === st.cook);
+    if (!cook) { st.cook = null; continue; }
+    const until = cook.type === 'part' ? Math.min(now, cook.expireAt) : now;
+    st.progress = Math.min(st.duration, st.progress + Math.max(0, until - since) * cookRate(cook));
+    if (st.progress >= st.duration) st.cook = null;
+  }
 }
 
 function initRuntime() {
@@ -90,6 +142,13 @@ function initRuntime() {
     const h = homeOf(s, i);
     s.x = h.x; s.y = h.y; s.task = null;
   });
+  S.stoves.forEach((st, i) => {
+    const cook = st.cook != null && S.staff.find(s => s.id === st.cook);
+    if (!cook || cook.task) { st.cook = null; return; }
+    const p = stovePos(i);
+    cook.x = p.x; cook.y = p.y;
+    cook.task = { type: 'cook', stove: i, phase: 'work' };
+  });
 }
 
 // ===== 計算 =====
@@ -99,29 +158,42 @@ const xpNeeded = l => Math.round(12 * Math.pow(l, 1.5));
 const spawnInterval = () => Math.max(2, 8 - popularity() * 0.06 - S.level * 0.15);
 const speedOf = s => 14 + s.stars * 5;
 const cleanTime = s => 2.4 - s.stars * 0.3;
+const cookRate = s => 0.8 + (s.stars - 1) * 0.1;
 const scoutFee = stars => 20 + stars * stars * 15;
 const stovePrice = () => Math.round(150 * Math.pow(2, S.stoves.length - 2));
 const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const contractPrice = () => Math.round(800 * Math.pow(1.5, S.contractsBought));
 const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.01));
+const roleOf = s => s.owner ? 'owner' : s.type;
+const displayName = p => p.owner ? p.name : p.name + 'さん';
 
-const seatPos = ti => ({ x: TABLE_POS[ti].x - 8, y: TABLE_POS[ti].y - 2 });
-const standPos = ti => ({ x: TABLE_POS[ti].x + 7, y: TABLE_POS[ti].y - 1 });
+const seatPos = ti => ({ x: TABLE_POS[ti].x - 9, y: TABLE_POS[ti].y + 3 });
+const standPos = ti => ({ x: TABLE_POS[ti].x + 9, y: TABLE_POS[ti].y + 3 });
+function stovePos(i) {
+  const col = i % 3, row = Math.floor(i / 3);
+  return { x: 62 + 35 * (col + 0.5) / 3 + row * 2.5, y: 25 + row * 6 };
+}
 function homeOf(s, idx) {
   const i = idx ?? S.staff.indexOf(s);
-  return { x: 6 + (i % 7) * 8, y: 28 + Math.floor(i / 7) * 5 };
+  return { x: 6 + (i % 7) * 8, y: 35 + Math.floor(i / 7) * 6 };
 }
 
-function stoveState(st, now = Date.now()) {
+function stoveInfo(i) {
+  const st = S.stoves[i];
   if (!st.dish) return { kind: 'idle' };
-  const total = DISH[st.dish].time * 1000;
-  const elapsed = now - st.start;
-  if (elapsed >= total) return { kind: 'ready' };
-  return { kind: 'cooking', ratio: elapsed / total, left: Math.ceil((total - elapsed) / 1000) };
+  if (st.progress >= st.duration) return { kind: 'ready' };
+  const cook = st.cook != null ? S.staff.find(s => s.id === st.cook) : null;
+  const working = !!cook && cook.task?.type === 'cook' && cook.task.stove === i && cook.task.phase === 'work';
+  return {
+    kind: working ? 'cooking' : 'waiting',
+    cook,
+    ratio: st.progress / st.duration,
+    left: (st.duration - st.progress) / 1000 / (cook ? cookRate(cook) : 1),
+  };
 }
 
-const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 const yen = n => '¥' + n.toLocaleString('ja-JP');
 const starStr = n => '★'.repeat(n) + '☆'.repeat(5 - n);
 function fmtTime(sec) {
@@ -138,6 +210,11 @@ function rollStars() {
   if (r < 0.985) return 4;
   return 5;
 }
+function randomPerson() {
+  const nation = rand(Object.keys(NATIONS));
+  const g = Math.random() < 0.5 ? 'm' : 'f';
+  return { nation, g, name: rand(NATIONS[nation][g]), look: Chara.randomLook(g) };
+}
 
 // ===== カウンター =====
 function addToCounter(dishId, n) {
@@ -145,34 +222,32 @@ function addToCounter(dishId, n) {
   if (st) st.n += n; else S.counter.push({ dish: dishId, n });
 }
 function takeServing() {
-  // 一番高い料理から出す
-  let best = null;
-  for (const st of S.counter) if (!best || DISH[st.dish].price > DISH[best.dish].price) best = st;
-  if (!best) return null;
-  best.n--;
-  if (best.n <= 0) S.counter.splice(S.counter.indexOf(best), 1);
-  return best.dish;
+  if (!S.counter.length) return null;
+  // お客さんは基本的に安い料理から頼む（たまに別の料理も頼む）
+  const byPrice = [...S.counter].sort((a, b) => DISH[a.dish].price - DISH[b.dish].price);
+  const st = Math.random() < CHEAPEST_RATE ? byPrice[0] : rand(byPrice);
+  st.n--;
+  if (st.n <= 0) S.counter.splice(S.counter.indexOf(st), 1);
+  return st.dish;
 }
 
 // ===== アクション =====
-function startCooking(i, dishId) {
+function orderDish(i, dishId) {
   const d = DISH[dishId], st = S.stoves[i];
   if (!d || !st || st.dish || S.level < d.level || S.money < d.cost) return;
   S.money -= d.cost;
-  st.dish = dishId;
-  st.start = Date.now();
+  Object.assign(st, { dish: dishId, progress: 0, duration: d.time * 1000, cook: null });
   closeModal();
   save();
 }
 
 function collectStove(i) {
   const st = S.stoves[i];
-  if (!st || stoveState(st).kind !== 'ready') return;
+  if (!st || stoveInfo(i).kind !== 'ready') return;
   const d = DISH[st.dish];
   addToCounter(d.id, d.servings);
-  st.dish = null;
-  st.start = 0;
-  toast(`${d.emoji} ${d.name}が${d.servings}人前できあがりました`);
+  Object.assign(st, newStove());
+  toast(`${d.emoji} ${d.name}を${d.servings}人前カウンターに並べました`);
   addXp(d.xp);
   save();
 }
@@ -201,13 +276,13 @@ function hire(cid) {
   t.cust = null;
   customers.splice(customers.indexOf(c), 1);
   const s = {
-    id: S.nextId++, name: c.name, emoji: c.emoji, stars: c.stars,
+    id: S.nextId++, name: c.name, g: c.g, nation: c.nation, look: c.look, stars: c.stars,
     type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000, owner: false,
     x: c.x, y: c.y, task: null,
   };
   S.staff.push(s);
   S.stats.hired++;
-  toast(`🤝 ${s.name}さんをアルバイトとして雇いました（契約${fmtTime(CONTRACT_SEC)}）`);
+  toast(`🤝 ${displayName(s)}をアルバイトとして雇いました（契約${fmtTime(CONTRACT_SEC)}）`);
   closeModal();
   save();
 }
@@ -219,7 +294,7 @@ function promote(id) {
   s.type = 'perm';
   s.expireAt = 0;
   S.stats.promoted++;
-  toast(`📜 ${s.name}さんと永久雇用契約を結びました！ 正社員になりました`, true);
+  toast(`📜 ${displayName(s)}と永久雇用契約を結びました！ 正社員になりました`, true);
   save();
 }
 
@@ -233,7 +308,7 @@ function removeStaff(s, message) {
 function fire(id) {
   const s = S.staff.find(s => s.id === id);
   if (!s || s.owner) return;
-  removeStaff(s, `👋 ${s.name}さんが退職しました`);
+  removeStaff(s, `👋 ${displayName(s)}が退職しました`);
   closeModal();
 }
 
@@ -242,7 +317,7 @@ function buy(kind, id) {
     const p = stovePrice();
     if (S.stoves.length >= MAX_STOVES || S.money < p) return;
     S.money -= p;
-    S.stoves.push({ dish: null, start: 0 });
+    S.stoves.push(newStove());
     toast('🔥 コンロを増やしました');
   } else if (kind === 'table') {
     const p = tablePrice();
@@ -274,8 +349,8 @@ function resetGame() {
   S = newGame();
   S.seenHelp = true;
   initRuntime();
+  for (const el of floorEls.values()) el.remove();
   floorEls.clear();
-  document.querySelectorAll('#floor .person, #floor .table').forEach(el => el.remove());
   keys = {};
   closeModal();
   save();
@@ -287,9 +362,10 @@ function moveTo(o, p, step) {
   const dx = p.x - o.x, dy = p.y - o.y;
   const d = Math.hypot(dx, dy);
   if (Math.abs(dx) > 0.5) o.flip = dx < 0;
-  if (d <= step) { o.x = p.x; o.y = p.y; return true; }
+  if (d <= step) { o.x = p.x; o.y = p.y; o.moving = false; return true; }
   o.x += dx / d * step;
   o.y += dy / d * step;
+  o.moving = true;
   return false;
 }
 
@@ -297,7 +373,7 @@ function spawnCustomer() {
   const ti = tables.findIndex(t => t.state === 'free');
   if (ti < 0) return false;
   const c = {
-    id: uid++, name: rand(SURNAMES), emoji: rand(FACES), stars: rollStars(),
+    id: uid++, ...randomPerson(), stars: rollStars(),
     x: DOOR.x, y: DOOR.y, table: ti, state: 'in',
     patience: PATIENCE_SEC, server: null, dish: null, eat: 0, flip: true,
   };
@@ -322,12 +398,16 @@ function cancelTaskOf(s) {
     if (k.dish) addToCounter(k.dish, 1);
     const c = customers.find(c => c.id === k.cid);
     if (c) c.server = null;
+  } else if (k.type === 'cook') {
+    const st = S.stoves[k.stove];
+    if (st && st.cook === s.id) st.cook = null;
   } else if (k.type === 'clean') {
     if (tables[k.table]) tables[k.table].cleaner = null;
   }
   s.task = null;
 }
 
+// 仕事の優先順位：配膳 → 調理 → 片付け
 function findTask(s) {
   if (S.counter.length) {
     const c = customers
@@ -338,6 +418,12 @@ function findTask(s) {
       c.server = s.id;
       return;
     }
+  }
+  const si = S.stoves.findIndex(st => st.dish && st.cook == null && st.progress < st.duration);
+  if (si >= 0) {
+    S.stoves[si].cook = s.id;
+    s.task = { type: 'cook', stove: si, phase: 'go' };
+    return;
   }
   const ti = tables.findIndex(t => t.state === 'dirty' && !t.cleaner);
   if (ti >= 0) {
@@ -351,7 +437,7 @@ function update(dt) {
 
   for (const s of [...S.staff]) {
     if (s.type === 'part' && now >= s.expireAt) {
-      removeStaff(s, `⌛ アルバイトの${s.name}さんが契約満了で辞めてしまいました`);
+      removeStaff(s, `⌛ アルバイトの${displayName(s)}が契約満了で辞めてしまいました`);
     }
   }
 
@@ -368,8 +454,8 @@ function update(dt) {
         c.patience -= dt;
         if (c.patience <= 0) {
           customerLeave(c, true);
-          floatText('💢', c.x, c.y - 6, true);
-          toast(`😠 ${c.name}さんが待ちきれずに帰ってしまいました`);
+          floatText('💢', c.x, c.y - 16, true);
+          toast(`😠 ${displayName(c)}が待ちきれずに帰ってしまいました`);
         }
       }
     } else if (c.state === 'eat') {
@@ -378,7 +464,7 @@ function update(dt) {
         const pay = payFor(c.dish);
         S.money += pay;
         S.stats.served++;
-        floatText('+' + yen(pay), c.x, c.y - 8);
+        floatText('+' + yen(pay), c.x, c.y - 16);
         customerLeave(c, false);
         addXp(1);
       }
@@ -408,6 +494,20 @@ function update(dt) {
         c.server = null;
         s.task = null;
       }
+    } else if (k.type === 'cook') {
+      const st = S.stoves[k.stove];
+      if (!st || !st.dish || st.cook !== s.id) { s.task = null; return; }
+      if (k.phase === 'go') {
+        if (moveTo(s, stovePos(k.stove), step)) { k.phase = 'work'; s.flip = false; }
+      } else {
+        st.progress = Math.min(st.duration, st.progress + dt * 1000 * cookRate(s));
+        if (st.progress >= st.duration) {
+          st.cook = null;
+          s.task = null;
+          toast(`${DISH[st.dish].emoji} ${DISH[st.dish].name}ができあがりました！ タップして並べましょう`);
+          save();
+        }
+      }
     } else if (k.type === 'clean') {
       const t = tables[k.table];
       if (!t || t.state !== 'dirty') { s.task = null; return; }
@@ -434,11 +534,11 @@ function setKeyed(el, name, key, html) {
   return true;
 }
 
-function personEl(key, cls, html) {
+function floorEl(key, cls, html) {
   let el = floorEls.get(key);
   if (!el) {
     el = document.createElement('div');
-    el.className = 'person ' + cls;
+    el.className = cls;
     el.innerHTML = html;
     floor.appendChild(el);
     floorEls.set(key, el);
@@ -452,14 +552,28 @@ function place(el, x, y) {
   el.style.top = y + '%';
 }
 
+const PERSON_HTML = '<div class="bubble"></div><div class="sprite"></div><div class="carry"></div><div class="tag"></div>';
+
+function placePerson(el, p, role) {
+  place(el, p.x, p.y);
+  el.style.zIndex = 10 + Math.round(p.y);
+  el.classList.toggle('flip', !!p.flip);
+  el.classList.toggle('walk', !!p.moving);
+  if (el._role !== role) {
+    el._role = role;
+    el.querySelector('.sprite').innerHTML = Chara.svg(p.look, role);
+  }
+}
+
 function renderFloor() {
   for (const el of floorEls.values()) el._seen = false;
 
   tables.forEach((t, i) => {
-    const el = personEl('t' + i, '', '');
-    if (!el.classList.contains('table')) {
-      el.className = 'table';
+    const el = floorEl('t' + i, 'table', '');
+    if (!el._placed) {
+      el._placed = true;
       place(el, TABLE_POS[i].x, TABLE_POS[i].y);
+      el.style.zIndex = 10 + TABLE_POS[i].y;
     }
     const c = t.cust != null ? customers.find(c => c.id === t.cust) : null;
     const content = t.state === 'dirty' ? '🍽️' : (c && c.state === 'eat' ? DISH[c.dish].emoji : '');
@@ -468,16 +582,13 @@ function renderFloor() {
   });
 
   for (const c of customers) {
-    const el = personEl('c' + c.id, 'customer' + (c.stars >= 4 ? ' rare' : ''),
-      '<div class="bubble"></div><div class="face"></div>');
+    const el = floorEl('c' + c.id, 'person customer' + (c.stars >= 4 ? ' rare' : ''), PERSON_HTML);
     if (!el._init) {
       el._init = true;
       el.dataset.action = 'scout';
       el.dataset.cid = c.id;
-      el.querySelector('.face').textContent = c.emoji;
     }
-    place(el, c.x, c.y);
-    el.classList.toggle('flip', !!c.flip);
+    placePerson(el, c, 'customer');
     const bubble = el.querySelector('.bubble');
     let bkey = '';
     if (c.state === 'wait') bkey = c.server ? 'coming' : 'wait';
@@ -486,7 +597,7 @@ function renderFloor() {
     if (el._bkey !== bkey) {
       el._bkey = bkey;
       bubble.innerHTML = bkey === 'wait' ? '<span>🍴</span><div class="pbar"><i></i></div>'
-        : bkey === 'coming' ? '<span>😊</span>'
+        : bkey === 'coming' ? '<span>🎵</span>'
         : bkey === 'eat' ? '<span>😋</span>'
         : bkey === 'angry' ? '<span>💢</span>' : '';
     }
@@ -499,22 +610,22 @@ function renderFloor() {
   }
 
   for (const s of S.staff) {
-    const el = personEl('s' + s.id, 'staff',
-      '<div class="carry"></div><div class="face"></div><div class="tag"></div>');
-    if (el._emoji !== s.emoji) { el._emoji = s.emoji; el.querySelector('.face').textContent = s.emoji; }
-    const tagKey = s.owner ? 'owner' : s.type;
-    if (el._tag !== tagKey) {
-      el._tag = tagKey;
+    const el = floorEl('s' + s.id, 'person staff', PERSON_HTML);
+    const role = roleOf(s);
+    placePerson(el, s, role);
+    if (el._tag !== role) {
+      el._tag = role;
       const tag = el.querySelector('.tag');
-      tag.className = 'tag ' + tagKey;
+      tag.className = 'tag ' + role;
       tag.textContent = s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'バイト';
     }
-    place(el, s.x, s.y);
-    el.classList.toggle('flip', !!s.flip);
     const k = s.task;
-    const carry = !k ? '' : k.type === 'serve' ? (k.phase === 'table' ? DISH[k.dish].emoji : '')
-      : k.phase === 'work' ? '🧽' : '';
+    let carry = '';
+    if (k?.type === 'serve' && k.phase === 'table') carry = DISH[k.dish].emoji;
+    else if (k?.type === 'clean' && k.phase === 'work') carry = '🧽';
+    else if (k?.type === 'cook' && k.phase === 'work') carry = '🍳';
     if (el._carry !== carry) { el._carry = carry; el.querySelector('.carry').textContent = carry; }
+    el.classList.toggle('working', !!k && k.phase === 'work');
   }
 
   for (const [key, el] of floorEls) {
@@ -524,22 +635,21 @@ function renderFloor() {
   // カウンター
   const counterKey = S.counter.map(st => st.dish + st.n).join(',');
   setKeyed($('counter'), 'counter', counterKey,
-    '<span class="label">カウンター</span>' + (S.counter.length
+    '<span class="label">COUNTER</span>' + (S.counter.length
       ? S.counter.map(st => `<span class="stack">${DISH[st.dish].emoji}<small>×${st.n}</small></span>`).join('')
-      : '<span class="empty">料理がありません…キッチンで作りましょう</span>'));
+      : '<span class="empty">料理がありません</span>'));
 
   // ミニコンロ
-  const now = Date.now();
-  const states = S.stoves.map(st => stoveState(st, now));
-  const stoveKey = S.stoves.map((st, i) => states[i].kind + st.dish).join(',');
+  const infos = S.stoves.map((_, i) => stoveInfo(i));
+  const stoveKey = S.stoves.map((st, i) => infos[i].kind + st.dish).join(',');
   setKeyed($('miniStoves'), 'mini', stoveKey, S.stoves.map((st, i) => {
-    const k = states[i].kind;
+    const k = infos[i].kind;
     if (k === 'idle') return `<button class="mini-stove idle" data-action="pick" data-i="${i}" aria-label="コンロ${i + 1}">🔥</button>`;
     if (k === 'ready') return `<button class="mini-stove ready" data-action="collect" data-i="${i}" aria-label="できあがり">${DISH[st.dish].emoji}</button>`;
-    return `<button class="mini-stove cooking" data-action="tab" data-tab="kitchen"><span>${DISH[st.dish].emoji}</span><i class="fill" data-mini="${i}"></i></button>`;
+    return `<button class="mini-stove ${k}" data-action="tab" data-tab="kitchen"><span>${DISH[st.dish].emoji}</span><i class="fill" data-mini="${i}"></i></button>`;
   }).join(''));
-  states.forEach((s, i) => {
-    if (s.kind !== 'cooking') return;
+  infos.forEach((s, i) => {
+    if (s.kind !== 'cooking' && s.kind !== 'waiting') return;
     const f = floor.querySelector(`[data-mini="${i}"]`);
     if (f) f.style.width = (s.ratio * 100).toFixed(1) + '%';
   });
@@ -562,6 +672,10 @@ function floatText(text, x, y, bad) {
 // ===== 描画：HUD とパネル =====
 let currentTab = 'kitchen';
 
+function card(p, role, stars) {
+  return `<div class="card r${stars}">${Chara.portrait(p.look, role)}</div>`;
+}
+
 function renderHud() {
   $('money').textContent = yen(S.money);
   $('level').textContent = S.level;
@@ -572,14 +686,14 @@ function renderHud() {
 
 function renderKitchen() {
   const el = $('kitchen');
-  const now = Date.now();
-  const states = S.stoves.map(st => stoveState(st, now));
-  const key = S.stoves.map((st, i) => states[i].kind + st.dish).join(',');
+  const infos = S.stoves.map((_, i) => stoveInfo(i));
+  const key = S.stoves.map((st, i) => [infos[i].kind, st.dish, infos[i].cook?.id].join(':')).join(',');
   setKeyed(el, 'kitchen', key, `
     <h3>コンロ（${S.stoves.length}/${MAX_STOVES}）</h3>
-    <p class="note">料理を作ってカウンターに並べると、スタッフがお客さんに運びます。</p>
+    <p class="note">料理を注文すると、手の空いたスタッフがコンロに入って調理します。調理中のスタッフは配膳できません。
+    できあがったらタップしてカウンターに並べましょう。</p>
     <div class="stoves">${S.stoves.map((st, i) => {
-      const s = states[i];
+      const s = infos[i];
       if (s.kind === 'idle') {
         return `<button class="stove idle" data-action="pick" data-i="${i}">
           <div class="big">🔥</div>コンロ${i + 1}<span>タップして料理を作る</span></button>`;
@@ -589,11 +703,15 @@ function renderKitchen() {
         return `<button class="stove ready" data-action="collect" data-i="${i}">
           <div class="big">${d.emoji}</div>できあがり！<span>タップでカウンターへ（${d.servings}人前）</span></button>`;
       }
-      return `<div class="stove cooking"><div class="big">${d.emoji}</div>${d.name}
-        <div class="bar"><i data-prog="${i}"></i></div><span data-left="${i}"></span></div>`;
+      const who = s.kind === 'cooking' ? `${displayName(s.cook)}が調理中`
+        : s.cook ? `${displayName(s.cook)}が向かっています` : '調理スタッフ待ち…';
+      return `<div class="stove ${s.kind}">
+        <div class="stove-head">${s.cook ? card(s.cook, roleOf(s.cook), s.cook.stars) : ''}<div class="big">${d.emoji}</div></div>
+        ${d.name}<div class="bar"><i data-prog="${i}"></i></div>
+        <span>${who}</span><span data-left="${i}"></span></div>`;
     }).join('')}</div>`);
-  states.forEach((s, i) => {
-    if (s.kind !== 'cooking') return;
+  infos.forEach((s, i) => {
+    if (s.kind !== 'cooking' && s.kind !== 'waiting') return;
     const bar = el.querySelector(`[data-prog="${i}"]`);
     const left = el.querySelector(`[data-left="${i}"]`);
     if (bar) bar.style.width = (s.ratio * 100).toFixed(1) + '%';
@@ -605,6 +723,7 @@ function staffStatus(s) {
   const k = s.task;
   if (!k) return '待機中';
   if (k.type === 'serve') return k.phase === 'counter' ? '料理を取りに行っています' : '配膳中';
+  if (k.type === 'cook') return k.phase === 'go' ? 'コンロへ移動中' : `コンロ${k.stove + 1}で調理中`;
   return '片付け中';
 }
 
@@ -617,10 +736,10 @@ function renderStaff() {
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約はレベルアップかショップで手に入ります。</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
-        <div class="ico">${s.emoji}</div>
+        ${card(s, roleOf(s), s.stars)}
         <div class="info">
-          <div class="name">${s.name}${s.owner ? '' : 'さん'}
-            <span class="badge ${s.owner ? 'owner' : s.type}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
+          <div class="name">${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}
+            <span class="badge ${roleOf(s)}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
           <div class="sub">速さ <span class="stars">${starStr(s.stars)}</span>　<span data-status="${s.id}"></span></div>
           ${s.type === 'part' ? `<div class="bar contract"><i data-contract="${s.id}"></i></div>
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
@@ -713,6 +832,7 @@ function openDishPicker(i) {
   if (S.stoves[i]?.dish) return;
   openModal(`
     <h2>🔥 コンロ${i + 1}：何を作りますか？</h2>
+    <p class="note">材料費を払うと、手の空いたスタッフが調理を始めます。</p>
     <div class="dish-list">${DISHES.map(d => {
       const locked = S.level < d.level;
       return `<div class="row ${locked ? 'locked' : ''}">
@@ -732,12 +852,19 @@ function openScout(cid) {
   if (!c || (c.state !== 'wait' && c.state !== 'eat')) return;
   const fee = scoutFee(c.stars);
   const full = S.staff.length >= staffCap();
+  const n = NATIONS[c.nation];
   openModal(`
-    <h2>${c.emoji} ${c.name}さん</h2>
-    <p>仕事の速さ <span class="stars">${starStr(c.stars)}</span></p>
+    <div class="profile">
+      <div class="card big r${c.stars}">${Chara.portrait(c.look, 'customer')}</div>
+      <div>
+        <h2>${displayName(c)}</h2>
+        <p class="sub">${n.flag} ${n.name}出身</p>
+        <p>仕事の速さ <span class="stars">${starStr(c.stars)}</span></p>
+      </div>
+    </div>
     <p>アルバイトとしてスカウトしますか？ 契約期間は <b>${fmtTime(CONTRACT_SEC)}</b> です。
     あとで永久雇用契約を結べば正社員になります。</p>
-    ${full ? `<p style="color:var(--warn)">スタッフがいっぱいです（${S.staff.length}/${staffCap()}人）。レベルを上げると雇える人数が増えます。</p>` : ''}
+    ${full ? `<p class="warn">スタッフがいっぱいです（${S.staff.length}/${staffCap()}人）。レベルを上げると雇える人数が増えます。</p>` : ''}
     <div class="actions">
       <button class="btn ghost" data-action="close">やめる</button>
       <button class="btn" data-action="hire" data-cid="${c.id}" ${full || S.money < fee ? 'disabled' : ''}>${yen(fee)} でスカウト</button>
@@ -750,8 +877,9 @@ function openHelp() {
   openModal(`
     <h2>☕ 永久雇用カフェの遊び方</h2>
     <ul>
-      <li><b>キッチン</b>でコンロをタップして料理を作ります。できあがったらタップしてカウンターへ並べます。</li>
-      <li>スタッフがカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。汚れたテーブルもスタッフが片付けます。</li>
+      <li><b>キッチン</b>でコンロをタップして料理を注文します。手の空いた<b>スタッフがコンロに入って調理</b>します。できあがったらタップしてカウンターへ並べます。</li>
+      <li>スタッフがカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
+      <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、人手が足りなくなったら雇いましょう。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
@@ -782,7 +910,7 @@ document.addEventListener('click', e => {
   switch (d.action) {
     case 'tab': setTab(d.tab); break;
     case 'pick': openDishPicker(+d.i); break;
-    case 'cook': startCooking(+d.i, d.dish); break;
+    case 'cook': orderDish(+d.i, d.dish); break;
     case 'collect': collectStove(+d.i); break;
     case 'scout': openScout(+d.cid); break;
     case 'hire': hire(+d.cid); break;
@@ -790,7 +918,7 @@ document.addEventListener('click', e => {
     case 'askFire': {
       const s = S.staff.find(s => s.id === +d.id);
       if (!s) break;
-      openModal(`<h2>${s.emoji} ${s.name}さんを解雇しますか？</h2>
+      openModal(`<h2>${displayName(s)}を解雇しますか？</h2>
         <p>${s.type === 'perm' ? '正社員を解雇すると、使った永久雇用契約は戻りません。' : 'アルバイトの契約を打ち切ります。'}</p>
         <div class="actions"><button class="btn ghost" data-action="close">やめる</button>
         <button class="btn danger" data-action="fire" data-id="${s.id}">解雇する</button></div>`);
@@ -811,6 +939,8 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+// 長押しでメニューが出ないようにする
+document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 window.addEventListener('pagehide', save);
 
@@ -835,6 +965,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* 登録できなくてもゲームは遊べる */ });
 }
 
+applyOffline();
 initRuntime();
 renderUI();
 requestAnimationFrame(frame);

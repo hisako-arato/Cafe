@@ -1,11 +1,12 @@
 'use strict';
 
 // ファイルを更新したら CACHE の番号を上げる
-const CACHE = 'eikyu-cafe-v1';
+const CACHE = 'eikyu-cafe-v2';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
+  './chara.js',
   './game.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
