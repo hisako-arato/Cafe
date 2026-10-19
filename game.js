@@ -46,6 +46,12 @@ const DISHES = [
   { id: 'pizza',     name: 'マルゲリータ',     emoji: '🍕', time: 100, cost: 120, servings: 12, price: 90,  xp: 18, secret: true },
   { id: 'bouilla',   name: 'ブイヤベース',     emoji: '🥘', time: 160, cost: 260, servings: 8,  price: 170, xp: 28, secret: true },
   { id: 'course',    name: '三ツ星のフルコース', emoji: '🦞', time: 240, cost: 420, servings: 8, price: 300, xp: 45, secret: true },
+  // ボスの店の固有レシピ
+  { id: 'siphon',      name: '漆黒のサイフォンコーヒー', emoji: '🖤', time: 30,  cost: 40,  servings: 12, price: 60,  xp: 10, secret: true, boss: true },
+  { id: 'bigburger',   name: '伝説のトリプルバーガー',   emoji: '👑', time: 60,  cost: 110, servings: 14, price: 95,  xp: 18, secret: true, boss: true },
+  { id: 'omakase',     name: '大将のおまかせ握り',       emoji: '🎏', time: 150, cost: 260, servings: 10, price: 210, xp: 34, secret: true, boss: true },
+  { id: 'souffle',     name: '幻のスフレ',               emoji: '🌠', time: 120, cost: 220, servings: 12, price: 190, xp: 32, secret: true, boss: true },
+  { id: 'grandcourse', name: '太陽のグランコース',       emoji: '🌞', time: 300, cost: 700, servings: 10, price: 520, xp: 70, secret: true, boss: true },
 ];
 const DISH = Object.fromEntries(DISHES.map(d => [d.id, d]));
 const canCook = d => d.secret ? S.recipes.includes(d.id) : S.level >= d.level;
@@ -180,8 +186,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -872,7 +878,7 @@ function renderFloor() {
   // メニュー黒板
   const menu = DISHES.filter(canCook).sort((a, b) => a.price - b.price).slice(-4);
   setKeyed($('board'), 'board', menu.map(d => d.id).join(','),
-    '<b>MENU</b>' + menu.map(d => `<span>${d.emoji} ${d.name}<em>${yen(d.price)}</em></span>`).join(''));
+    '<b>MENU</b>' + menu.map(d => `<span><i>${d.emoji} ${d.name}</i><em>${yen(d.price)}</em></span>`).join(''));
 }
 
 function floatText(text, x, y, bad) {
@@ -966,7 +972,7 @@ function renderStaff(el) {
         <div class="info">
           <div class="name">${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}
             <span class="badge ${roleOf(s)}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
-          ${s.title ? `<div class="sub">🏷️ 元「${s.from}」の${s.title}</div>` : ''}
+          ${s.title ? `<div class="sub">${s.boss ? '👑' : '🏷️'} 元「${s.from}」の${s.title}</div>` : ''}
           <div class="sub">速さ <span class="stars">${starStr(s.stars)}</span>　<span data-status="${s.id}"></span></div>
           ${s.type === 'part' ? `<div class="bar contract"><i data-contract="${s.id}"></i></div>
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
@@ -1141,7 +1147,7 @@ function openDishPicker(i) {
       const locked = !canCook(d);
       return `<div class="row ${locked ? 'locked' : ''}">
         <div class="ico">${d.emoji}</div>
-        <div class="info"><div class="name">${d.name}${d.secret ? ' <span class="badge ace">引き抜き</span>' : ''}</div>
+        <div class="info"><div class="name">${d.name}${d.boss ? ' <span class="badge boss">👑 固有</span>' : d.secret ? ' <span class="badge ace">引き抜き</span>' : ''}</div>
           <div class="sub">${locked ? `レベル${d.level}で解禁` :
             `⏱ ${fmtTime(d.time)}　🍽 ${servingsOf(d)}人前　1人前 ${yen(d.price)}`}</div></div>
         <button class="btn" data-action="cook" data-i="${i}" data-dish="${d.id}"
@@ -1191,6 +1197,7 @@ function openHelp() {
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
       <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
       <li><b>🗺️ 街</b>では<b>引き抜き作戦</b>ができます。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
+      <li>条件を満たすと街に<b>👑 名店（ボス）</b>が現れます。料理勝負で勝つと<b>限定アイテム</b>、潜入や勝負で<b>固有レシピ</b>、口説き落とすと専用の制服を着た<b>エース</b>が手に入ります。3つそろえると制覇です。</li>
       <li>「👗 身支度」で着替えると<b>魅力</b>（口説く成功率）と<b>馴染み</b>（警戒されにくさ）が変わります。お店のドレスコードに合う服だと馴染みやすくなります。</li>
       <li>条件を満たしたら「ショップ」で<b>🏪 店舗ランク</b>を上げましょう。屋台から始まり、ランクが上がるほどコンロ・テーブル・スタッフ・設備強化の上限が増えます。データは自動で保存されます。</li>
     </ul>

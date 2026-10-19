@@ -29,6 +29,14 @@ const OUTFITS = [
   { id: 'guitar',     slot: 'item', name: 'ギター',             style: 'wild',    charm: 9,  blend: -4, price: 1900 },
   { id: 'bag',        slot: 'item', name: 'ブランドバッグ',     style: 'elegant', charm: 12, blend: 2,  price: 3000 },
 ];
+// ボスの店でしか手に入らない限定アイテム
+OUTFITS.push(
+  { id: 'garcon',    slot: 'body', name: '漆黒のギャルソン服', style: 'cool',    charm: 22, blend: 14, limited: 'noir' },
+  { id: 'starcap',   slot: 'head', name: '金のスターキャップ', style: 'casual',  charm: 14, blend: 10, limited: 'burger' },
+  { id: 'kappo',     slot: 'body', name: '大将の割烹着',       style: 'casual',  charm: 18, blend: 22, limited: 'ginrei' },
+  { id: 'patissier', slot: 'body', name: '天才のパティシエ服', style: 'cute',    charm: 26, blend: 12, limited: 'etoile' },
+  { id: 'gown',      slot: 'body', name: '星空のドレス',       style: 'elegant', charm: 38, blend: 6,  limited: 'soleil' },
+);
 const OUTFIT = Object.fromEntries(OUTFITS.map(o => [o.id, o]));
 
 // ライバル店の種類（すべて架空の NPC 店）。g が格（1〜10）
@@ -45,6 +53,41 @@ const STORE_TYPES = [
   { g: 10, type: '三ツ星フレンチ',   emoji: '🌟', style: 'elegant', recipes: ['course'],    names: ['ル・ソレイユ', 'グラン・メゾン・オーロラ'], ace: '伝説のシェフ' },
 ];
 const NPC_TITLES = ['ホール係', 'キッチン担当', 'アルバイト', '皿洗い', '新人'];
+
+// 店ごとの制服（引き抜いた店員は、うちの店でもこの制服で働く）
+const STORE_UNIFORMS = {
+  1: { body: 'cafeapron' }, 2: { body: 'baker', head: 'bandana' }, 3: { body: 'kappo', head: 'bandana' },
+  4: { body: 'fastfood', head: 'cap' }, 5: { body: 'chefcoat', head: 'chefhat' }, 6: { body: 'patissier' },
+  7: { body: 'kappo', head: 'hachimaki' }, 8: { body: 'trattoria' }, 9: { body: 'garcon' }, 10: { body: 'chefcoat', head: 'chefhat' },
+};
+
+// ボスの店（名店）。格の条件を満たすと街に現れ、制覇するまで残り続ける
+const BOSSES = [
+  { id: 'noir', g: 3, name: '純喫茶ノワール', type: '伝説の純喫茶', emoji: '🖤', style: 'cool', recipe: 'siphon', item: 'garcon',
+    ace: { name: 'クラウディア', nation: 'de', g: 'f', title: '伝説のバリスタ', stars: 5, ideal: 64, persona: 'cool', style: 'cool',
+      look: { hair: '#22223a', style: 'bob', eye: '#e11d48', skin: '#ffe6d5', mouth: 'smile', uniform: { body: 'garcon', face: 'monocle' } } } },
+  { id: 'burger', g: 5, name: 'ワールドバーガー本店', type: '巨大チェーンの本店', emoji: '👑', style: 'casual', recipe: 'bigburger', item: 'starcap',
+    ace: { name: 'ジョージ', nation: 'gb', g: 'm', title: '最速の店長代理', stars: 5, ideal: 80, persona: 'passion', style: 'casual',
+      look: { hair: '#eab04a', style: 'spiky', eye: '#2f7cf6', skin: '#fdd8bf', mouth: 'open', uniform: { body: 'fastfood', head: 'starcap' } } } },
+  { id: 'ginrei', g: 7, name: '鮨 銀嶺 本店', type: '老舗の名店', emoji: '🎏', style: 'elegant', recipe: 'omakase', item: 'kappo',
+    ace: { name: 'ミコワイ', nation: 'pl', g: 'm', title: '若き天才板前', stars: 5, ideal: 96, persona: 'struggle', style: 'casual',
+      look: { hair: '#3a2a2a', style: 'short', eye: '#14b8a6', skin: '#f7c9a6', mouth: 'smile', uniform: { body: 'kappo', head: 'hachimaki' } } } },
+  { id: 'etoile', g: 9, name: 'パティスリー・エトワール', type: '星付きパティスリー', emoji: '🌠', style: 'cute', recipe: 'souffle', item: 'patissier',
+    ace: { name: 'アメリア', nation: 'gb', g: 'f', title: '天才パティシエール', stars: 5, ideal: 112, persona: 'dreamer', style: 'cute',
+      look: { hair: '#f6d66b', style: 'twin', eye: '#a855f7', skin: '#ffe6d5', mouth: 'cat', accColor: '#f472b6', uniform: { body: 'patissier', head: 'ribbon' } } } },
+  { id: 'soleil', g: 10, name: '三ツ星 ル・ソレイユ', type: '三ツ星フレンチ', emoji: '🌞', style: 'elegant', recipe: 'grandcourse', item: 'gown',
+    ace: { name: 'ジョヴァンニ', nation: 'it', g: 'm', title: '伝説のシェフ', stars: 5, ideal: 128, persona: 'gentle', style: 'elegant',
+      look: { hair: '#e3e3f0', style: 'swept', eye: '#f59e0b', skin: '#eab48c', mouth: 'smile', uniform: { body: 'chefcoat', head: 'chefhat' } } } },
+];
+const BOSS = Object.fromEntries(BOSSES.map(b => [b.id, b]));
+const BOSS_POWER = 4;      // ボスの店は同じ格の店より強い
+const BOSS_ALERT = 1.3;    // ボスの店は警戒されやすい
+
+// ボスの攻略状況（限定アイテム・固有レシピ・エース）
+function bossProgress(b) {
+  return { item: S.wardrobe.owned.includes(b.item), recipe: S.recipes.includes(b.recipe), ace: !!(S.bossAces || {})[b.id] };
+}
+const bossCleared = b => Object.values(bossProgress(b)).every(Boolean);
 
 // 口説き落としの会話：話題・転職の動機・性格
 const TOPICS = { cooking: '🍳 料理の腕', money: '💰 お給料', dream: '🌈 将来の夢', holiday: '🏖️ 休日の過ごし方', complaint: '😤 職場の不満', fashion: '👗 おしゃれ' };
@@ -84,7 +127,7 @@ const BATTLE_CD_MS = 5 * 60 * 1000;
 const ALERT_DECAY_PER_MIN = 10;
 
 const gradeLabel = g => g <= 2 ? 'E' : g <= 4 ? 'D' : g <= 6 ? 'C' : g <= 8 ? 'B' : g === 9 ? 'A' : 'S';
-const storeType = st => STORE_TYPES.find(t => t.g === st.g);
+const storeType = st => st.boss ? BOSS[st.boss] : STORE_TYPES.find(t => t.g === st.g);
 const storeById = id => S.town.stores.find(st => st.id === id);
 const maxGrade = () => Math.min(10, Math.floor(3 + S.rank * 1.5));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -130,6 +173,7 @@ const alertMult = store => clamp(1 - blend(store) / 120, 0.3, 1.3);
 // ===== 街のお店 =====
 function genNpc(g, ace, type) {
   const p = randomPerson();
+  p.look.uniform = STORE_UNIFORMS[g];
   const stars = Math.min(5, 2 + Math.floor((g - 1) / 3) + (Math.random() < 0.4 ? 1 : 0) + (ace ? 1 : 0));
   return {
     id: S.town.nextId++, ...p, stars, ace,
@@ -159,8 +203,25 @@ function genStore(g) {
 }
 
 // 好感度・出禁・勝負中などの店は残して、ほかを入れ替える
+function genBossStore(b) {
+  const a = b.ace;
+  const look = { ...Chara.randomLook(a.g), ...a.look };
+  const ace = {
+    id: S.town.nextId++, name: a.name, nation: a.nation, g: a.g, look, stars: a.stars, ace: true, bossAce: b.id,
+    title: a.title, ideal: a.ideal, aff: 0, persona: a.persona, style: a.style, known: {},
+  };
+  const type = { ace: a.title };
+  return {
+    id: S.town.nextId++, g: b.g, boss: b.id, name: b.name,
+    recipes: [b.recipe, ...(STORE_TYPES.find(t => t.g === b.g).recipes)],
+    npcs: [ace, genNpc(b.g, false, type), genNpc(b.g, false, type)],
+    alert: 0, alertAt: Date.now(), bannedUntil: 0, battleCd: 0,
+  };
+}
+
 function storePinned(st) {
   const now = Date.now();
+  if (st.boss) return !bossCleared(BOSS[st.boss]);
   return st.npcs.some(n => n.aff > 0) || st.bannedUntil > now || st.battleCd > now ||
     S.battles.some(b => b.storeId === st.id) || (S.spy && S.spy.storeId === st.id);
 }
@@ -169,18 +230,33 @@ function refreshTown() {
   const keep = S.town.stores.filter(storePinned);
   S.town.stores = keep;
   const mg = maxGrade();
+  addBossStores();
   // 一番上の格の店を必ず1軒、残りは少し下の格から
   const want = [mg];
-  while (want.length + keep.length < TOWN_SIZE) want.push(Math.max(1, mg - Math.floor(Math.random() * 5)));
+  while (want.length + S.town.stores.filter(st => !st.boss).length < TOWN_SIZE) want.push(Math.max(1, mg - Math.floor(Math.random() * 5)));
   for (const g of want) S.town.stores.push(genStore(g));
-  S.town.stores.sort((a, b) => a.g - b.g);
+  S.town.stores.sort((a, b) => (b.boss ? 1 : 0) - (a.boss ? 1 : 0) || a.g - b.g);
   S.town.refreshAt = Date.now() + TOWN_REFRESH_MS;
+}
+
+// 条件を満たした、まだ制覇していないボスの店を並べる（入れ替えの枠には数えない）
+function addBossStores() {
+  for (const b of BOSSES) {
+    if (b.g > maxGrade() || bossCleared(b) || S.town.stores.some(st => st.boss === b.id)) continue;
+    S.town.stores.unshift(genBossStore(b));
+  }
 }
 
 function ensureTown() {
   if (!S.town) S.town = { stores: [], refreshAt: 0, nextId: 1 };
-  for (const st of S.town.stores) for (const n of st.npcs) if (!n.persona) Object.assign(n, genPersona());
+  for (const st of S.town.stores) {
+    for (const n of st.npcs) {
+      if (!n.persona) Object.assign(n, genPersona());
+      if (!st.boss && n.look && !n.look.uniform) n.look.uniform = STORE_UNIFORMS[st.g];
+    }
+  }
   if (!S.town.stores.length || Date.now() >= S.town.refreshAt) refreshTown();
+  else addBossStores();
 }
 
 function currentAlert(st) {
@@ -195,7 +271,7 @@ function settleAlert(st) {
 
 // ===== 料理勝負（メンバーを送り出して結果を待つ）=====
 const secretCount = () => S.recipes.length;
-const storePower = st => 1 + st.g * 2.2;
+const storePower = st => 1 + st.g * 2.2 + (st.boss ? BOSS_POWER : 0);
 const teamPower = members => members.reduce((a, s) => a + s.stars, 0) + secretCount() + S.up.stove * 0.5;
 const winChance = (members, st) => clamp(1 / (1 + Math.exp(-(teamPower(members) - storePower(st)) / 1.5)), 0.03, 0.97);
 const battleSec = st => 30 + st.g * 20;
@@ -277,8 +353,16 @@ function resolveBattles(report) {
       S.stats.battlesWon = (S.stats.battlesWon || 0) + 1;
       addXp(st.g * 4);
       lines.push(`${great ? '🌟 大成功！' : '🏆 勝利！'}「${st.name}」との料理勝負に勝ちました（${yen(money)}）`);
+      if (st.boss) {
+        const b = BOSS[st.boss];
+        if (!S.wardrobe.owned.includes(b.item)) {
+          S.wardrobe.owned.push(b.item);
+          lines.push(`👑 ボスに勝利！ 限定アイテム「${OUTFIT[b.item].name}」を手に入れました（身支度で着られます）`);
+          afterBossProgress(b);
+        }
+      }
       const recipe = st.recipes.find(r => !S.recipes.includes(r));
-      if (recipe && (great || Math.random() < 0.4)) lines.push(learnRecipe(recipe, st));
+      if (recipe && (great || Math.random() < (st.boss ? 0.6 : 0.4))) lines.push(learnRecipe(recipe, st));
       const npc = st.npcs.filter(n => !n.ace)[0];
       if (npc && Math.random() < (great ? 0.6 : 0.25)) lines.push(joinFromStore(st, npc, '負けを認めて'));
     } else {
@@ -293,13 +377,22 @@ function resolveBattles(report) {
   save();
 }
 
+// ボスを制覇したら知らせ、街から外す
+function afterBossProgress(b) {
+  if (!bossCleared(b)) return;
+  toast(`👑 「${b.name}」を完全制覇しました！`, true);
+  S.stats.bosses = (S.stats.bosses || 0) + 1;
+}
+
 function learnRecipe(id, st) {
   if (S.recipes.includes(id)) return '';
   S.recipes.push(id);
   st.recipes = st.recipes.filter(r => r !== id);
   S.stats.recipes = (S.stats.recipes || 0) + 1;
   const d = DISH[id];
-  return `💡 レシピ「${d.emoji} ${d.name}」を閃きました！ 厨房で作れます`;
+  const b = BOSSES.find(x => x.recipe === id);
+  if (b) afterBossProgress(b);
+  return `💡 ${b ? '固有' : ''}レシピ「${d.emoji} ${d.name}」を閃きました！ 厨房で作れます`;
 }
 
 // ライバル店の店員がアルバイトとして加入する
@@ -313,9 +406,13 @@ function joinFromStore(st, npc, how) {
   S.staff.push({
     id: S.nextId++, name: npc.name, g: npc.g, nation: npc.nation, look: npc.look, stars: npc.stars,
     title: npc.title, from: st.name, type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000,
-    owner: false, post: 'any', x: L.door.x, y: L.door.y, task: null,
+    owner: false, post: 'any', x: L.door.x, y: L.door.y, task: null, boss: npc.bossAce || null,
   });
   S.stats.poached = (S.stats.poached || 0) + 1;
+  if (npc.bossAce) {
+    S.bossAces = { ...(S.bossAces || {}), [npc.bossAce]: true };
+    afterBossProgress(BOSS[npc.bossAce]);
+  }
   return `🤝 ${how}「${st.name}」の${npc.title}・${npc.name}さん（${starStr(npc.stars)}）がアルバイトとして加入しました！`;
 }
 
@@ -380,7 +477,7 @@ function spySay(text, kind) {
 }
 
 function raiseAlert(st, base) {
-  st.alert = Math.min(100, st.alert + base * alertMult(st));
+  st.alert = Math.min(100, st.alert + base * alertMult(st) * (st.boss ? BOSS_ALERT : 1));
   if (st.alert >= 100) {
     st.bannedUntil = Date.now() + BAN_MS;
     st.alert = 0;
@@ -540,11 +637,14 @@ function openCloset(storeId) {
         ${slot !== 'body' ? `<button class="outfit ${!eq[slot] ? 'on' : ''}" data-action="equip" data-slot="${slot}" data-id="" data-store="${storeId || ''}"><b>なし</b></button>` : ''}
         ${OUTFITS.filter(o => o.slot === slot).map(o => {
           const owned = S.wardrobe.owned.includes(o.id);
+          if (o.limited && !owned) {
+            return `<div class="outfit locked limited"><b>👑 ？？？</b><small>${BOSS[o.limited].name}に勝つと手に入る</small></div>`;
+          }
           const on = eq[slot] === o.id;
           return `<button class="outfit ${on ? 'on' : ''} ${owned ? '' : 'shop'} ${st && o.style === storeType(st).style ? 'match' : ''}"
             data-action="${owned ? 'equip' : 'buyOutfit'}" data-slot="${slot}" data-id="${o.id}" data-store="${storeId || ''}"
             ${!owned && S.money < o.price ? 'disabled' : ''}>
-            <b>${o.name}</b><small>${STYLES[o.style]}</small>
+            <b>${o.limited ? '👑 ' : ''}${o.name}</b><small>${STYLES[o.style]}</small>
             <span>💖${o.charm >= 0 ? '+' : ''}${o.charm} 🕶️${o.blend >= 0 ? '+' : ''}${o.blend}</span>
             ${owned ? (on ? '<em>着用中</em>' : '') : `<em>${yen(o.price)}</em>`}
           </button>`;
@@ -683,7 +783,9 @@ function storeCard(st) {
   const banned = st.bannedUntil > now;
   const cd = st.battleCd > now;
   const alert = Math.round(currentAlert(st));
-  return `<div class="store-card g${gradeLabel(st.g)}">
+  const bp = st.boss && bossProgress(BOSS[st.boss]);
+  return `<div class="store-card g${gradeLabel(st.g)} ${st.boss ? 'boss' : ''}">
+    ${st.boss ? '<div class="boss-label">👑 名店（ボス）</div>' : ''}
     <div class="store-top">
       <span class="store-emoji">${type.emoji}</span>
       <div class="info">
@@ -692,6 +794,11 @@ function storeCard(st) {
       </div>
       <span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span>
     </div>
+    ${bp ? `<div class="chips boss-goals">
+      <span class="chip ${bp.item ? 'done' : ''}">${bp.item ? '✅' : '🎁'} 限定アイテム（料理勝負で勝つ）</span>
+      <span class="chip ${bp.recipe ? 'done' : ''}">${bp.recipe ? '✅' : '📖'} 固有レシピ</span>
+      <span class="chip ${bp.ace ? 'done' : ''}">${bp.ace ? '✅' : '💖'} エースを口説き落とす</span>
+    </div>` : ''}
     <div class="chips">
       <span class="chip diff ${d.cls}">${d.label}</span>
       ${st.recipes.filter(r => !S.recipes.includes(r)).map(r => `<span class="chip">📖 ${DISH[r].emoji} ${DISH[r].name}</span>`).join('')}
@@ -716,7 +823,8 @@ function renderTown(el) {
   const key = ['town', S.town.stores.map(st => [st.id, st.npcs.length, st.npcs.map(n => n.aff).join('/'), st.recipes.join('/'),
     st.bannedUntil > now, st.battleCd > now, Math.round(currentAlert(st) / 5)].join(':')).join(','),
     S.battles.map(b => b.storeId).join(','), availableForBattle().map(s => s.id + ':' + s.stars).join(','),
-    charm(), S.recipes.length, S.money >= refreshCost(), S.rank, S.spy ? 1 : 0].join('|');
+    charm(), S.recipes.length, S.money >= refreshCost(), S.rank, S.spy ? 1 : 0,
+    BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(',')].join('|');
   setKeyed(el, 'town', key, `
     <div class="protag-card">
       <div class="protag-fig">${Chara.svg(protagLook(), 'protag', S.wardrobe.eq)}</div>
@@ -727,6 +835,7 @@ function renderTown(el) {
         <button class="btn small" data-action="closet">👗 身支度</button>
       </div>
     </div>
+    ${bossBoard()}
     <h3>🗺️ 引き抜き作戦</h3>
     <p class="note"><b>格下</b>の店には「⚔️ 料理勝負」（スタッフを送り出して勝負）、<b>格上</b>の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としたりしましょう。
     店舗ランクを上げると、もっと格の高い店（いまは最大 ${gradeLabel(maxGrade())}）が現れます。</p>
@@ -739,6 +848,21 @@ function renderTown(el) {
 }
 
 const refreshCost = () => 50 * maxGrade();
+
+// ボスの一覧（攻略状況）
+function bossBoard() {
+  return `<h3>👑 名店の攻略</h3>
+    <div class="boss-board">${BOSSES.map(b => {
+      const p = bossProgress(b);
+      const open = b.g <= maxGrade();
+      const n = Object.values(p).filter(Boolean).length;
+      return `<div class="boss-cell ${bossCleared(b) ? 'cleared' : open ? '' : 'locked'}">
+        <span class="be">${open ? b.emoji : '🔒'}</span>
+        <b>${open ? b.name : '？？？'}</b>
+        <small>${bossCleared(b) ? '👑 制覇！' : open ? `攻略 ${n}/3` : `格 ${gradeLabel(b.g)} の店が現れると挑戦できます`}</small>
+      </div>`;
+    }).join('')}</div>`;
+}
 
 // 残り時間の表示（data-until）を更新する
 function updateTimers(root) {

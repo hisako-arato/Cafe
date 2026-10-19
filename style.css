@@ -249,6 +249,7 @@ button {
 }
 .board b { text-align: center; font-size: 2cqw; letter-spacing: .3em; color: #ffe8a3; }
 .board span { display: flex; justify-content: space-between; white-space: nowrap; }
+.board i { font-style: normal; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .board em { font-style: normal; color: #ffe8a3; margin-left: 1cqw; }
 
 /* カウンター（大理石の天板のバー） */
@@ -810,3 +811,28 @@ button {
 .hair-color.on { box-shadow: 0 0 0 3px #ec4899; }
 .hair-color:disabled { opacity: .4; }
 h3 small.note { font-weight: 600; margin-left: 6px; }
+
+/* ボスの店 */
+.store-card.boss {
+  border: 3px solid #f59e0b;
+  background: linear-gradient(160deg, #fffbeb, #fff 60%);
+  box-shadow: 0 0 0 2px #fde68a inset;
+  position: relative;
+}
+.boss-label { font-size: .72rem; font-weight: 900; color: #b45309; margin-bottom: 4px; }
+.chip.done { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.boss-goals .chip { font-size: .7rem; }
+.boss-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.boss-cell {
+  border: 2px solid #fde68a; background: #fffbeb; border-radius: 12px; padding: 6px 4px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px;
+}
+.boss-cell .be { font-size: 1.4rem; }
+.boss-cell b { font-size: .64rem; line-height: 1.25; }
+.boss-cell small { font-size: .6rem; color: var(--muted); line-height: 1.3; }
+.boss-cell.locked { border-color: var(--line); background: var(--panel-2); }
+.boss-cell.cleared { border-color: #f59e0b; background: linear-gradient(160deg, #fde68a, #fffbeb); }
+.boss-cell.cleared small { color: #b45309; font-weight: 900; }
+.badge.boss { background: linear-gradient(90deg, #f59e0b, #b45309); }
+.outfit.locked { border-style: dashed; opacity: .7; background: var(--panel-2); }
+.outfit.limited b { color: #b45309; }
