@@ -450,7 +450,8 @@ function startSpy(storeId) {
   cancelTaskOf(o);
   o.away = 'spy';
   o.walkOut = true;
-  S.spy = { storeId, msg: `${storeType(st).emoji} 「${st.name}」に客のふりをして入りました。怪しまれないように…`, kind: 'info', seq: 0 };
+  S.spy = { storeId, msg: `${storeType(st).emoji} 「${st.name}」に客のふりをして入りました。床をタップして歩き、席・厨房の扉・店員をタップしてみよう`, kind: 'info', seq: 0 };
+  spyInit(st);
   addLog(`🕵️ 店長が「${st.name}」へ潜入しに出かけました`);
   closeModal();
   setScreen('town');
@@ -464,8 +465,9 @@ function endSpy(msg) {
   const o = owner();
   if (o) { o.away = null; o.walkOut = false; o.x = L.door.x; o.y = L.door.y; }
   S.spy = null;
+  SPY = null;
   if (msg) toast(msg, true);
-  keys.town = undefined;
+  keys.town = keys.spyStatic = keys.spyPanel = undefined;
   $('town').scrollTop = 0;
   save();
 }
@@ -489,7 +491,7 @@ function raiseAlert(st, base) {
 
 function spyEat() {
   const st = spyStore();
-  if (!st || S.money < eatCost(st)) return;
+  if (!st || !SPY?.sitting || S.money < eatCost(st)) return;
   S.money -= eatCost(st);
   const recipe = st.recipes.find(r => !S.recipes.includes(r));
   if (!recipe) {
@@ -508,8 +510,8 @@ function spyEat() {
 function spyPeek() {
   const st = spyStore();
   const recipe = st && st.recipes.find(r => !S.recipes.includes(r));
-  if (!recipe) return;
-  if (Math.random() < peekChance(st)) {
+  if (!recipe || SPY?.ctx?.type !== 'door') return;
+  if (Math.random() < peekChanceNow(st)) {
     spySay(`🔍 ${rand(SPY_LINES.peekOk)}\n${learnRecipe(recipe, st)}`, 'good');
     addLog(`💡 潜入先でレシピ「${DISH[recipe].name}」を閃きました`, true);
   } else {
@@ -539,6 +541,7 @@ function reveal(npc, key) {
 }
 
 function spyTalk(npcId, topic) {
+  if (SPY?.ctx?.type !== 'npc' || SPY.ctx.id !== npcId) return;
   const st = spyStore();
   const npc = st && st.npcs.find(n => n.id === npcId);
   if (!npc || npc.aff >= 100 || !TOPICS[topic]) return;
@@ -563,6 +566,7 @@ function spyTalk(npcId, topic) {
 
 // 様子を見て、性格や好みのヒントを探る
 function spyObserve(npcId) {
+  if (SPY?.ctx?.type !== 'npc' || SPY.ctx.id !== npcId) return;
   const st = spyStore();
   const npc = st && st.npcs.find(n => n.id === npcId);
   if (!npc) return;
@@ -581,6 +585,7 @@ function spyObserve(npcId) {
 
 // 誘い文句を選んで誘う。相手の動機に合っていれば加入
 function spyInvite(npcId, motive) {
+  if (SPY?.ctx?.type !== 'npc' || SPY.ctx.id !== npcId) return;
   const st = spyStore();
   const npc = st && st.npcs.find(n => n.id === npcId);
   if (!npc || npc.aff < 100 || S.staff.length >= staffCap() || !MOTIVES[motive]) return;
@@ -611,7 +616,7 @@ function openCloset(storeId) {
   openModal(`<div class="sheet-head"><h2>👗 身支度</h2>
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
     <div class="closet-top">
-      <div class="closet-fig">${Chara.svg(protagLook(), 'protag', eq)}</div>
+      <div class="closet-fig">${Stand.svg(protagStandLook(), eq)}</div>
       <div>
         <b>店長（22歳）</b>
         <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(st)}</b></div>
@@ -659,6 +664,9 @@ function openCloset(storeId) {
 }
 
 const SALON_PRICE = 500;
+
+// 立ち絵用の見た目（髪の色 ID も渡して、PNG 差し替えのキーに使う）
+const protagStandLook = () => ({ ...protagLook(), hairColorId: S.wardrobe.hair.color });
 
 function setLine() {
   const b = setBonus();
@@ -741,38 +749,224 @@ function npcRow(n, spying, st) {
   </div>`;
 }
 
-function renderSpy(el) {
+// ===== 潜入：ライバル店の店内マップ（店長を操作する）=====
+// 座標は % 単位（マップは正方形）。人物は足元の位置
+const SPY_MAP = {
+  door: { x: 84, y: 31 },           // 厨房の扉の前
+  entrance: { x: 92, y: 97 },
+  tables: [{ x: 24, y: 52 }, { x: 60, y: 57 }, { x: 26, y: 80 }, { x: 64, y: 85 }],
+  route: [{ x: 18, y: 35 }, { x: 46, y: 37 }, { x: 72, y: 42 }, { x: 42, y: 66 }, { x: 80, y: 68 }, { x: 48, y: 92 }, { x: 84, y: 32 }],
+  bounds: { x1: 4, x2: 96, y1: 31, y2: 98 },
+  speed: 26, npcSpeed: 13, reach: 12,
+};
+const spySeat = i => ({ x: SPY_MAP.tables[i].x - 8, y: SPY_MAP.tables[i].y + 3 });
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+let SPY = null;  // 店内での位置など（保存しない）
+
+function spyInit(st) {
+  const free = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+  SPY = {
+    storeId: st.id,
+    p: { ...SPY_MAP.entrance, flip: true },
+    target: null, pending: null, ctx: null, sitting: false,
+    npcs: Object.fromEntries(st.npcs.map((n, i) => {
+      const w = SPY_MAP.route[(i * 2) % SPY_MAP.route.length];
+      return [n.id, { x: w.x, y: w.y, tx: w.x, ty: w.y, wait: 1 + Math.random() * 2 }];
+    })),
+    // 雰囲気づくりのお客さん（2卓に座っている）
+    patrons: free.slice(0, 2).map(i => ({ table: i, look: Chara.randomLook(Math.random() < 0.5 ? 'm' : 'f') })),
+  };
+}
+
+// 床・席・扉・店員をタップしたときの移動先
+function spyGo(target, id) {
+  if (!SPY) return;
+  SPY.sitting = false;
+  SPY.ctx = null;
+  if (S.spy) S.spy.focus = null;
+  if (target === 'seat') {
+    if (SPY.patrons.some(p => p.table === id)) { spySay('そこは他のお客さんが座っている…', 'info'); return; }
+    SPY.target = spySeat(id);
+    SPY.pending = { type: 'seat', i: id };
+  } else if (target === 'door') {
+    SPY.target = { ...SPY_MAP.door };
+    SPY.pending = { type: 'door' };
+  } else if (target === 'npc') {
+    const n = SPY.npcs[id];
+    if (!n) return;
+    SPY.target = { x: n.x + 7, y: n.y };
+    SPY.pending = { type: 'npc', id };
+  }
+  keys.spyPanel = undefined;
+}
+
+function spyMoveTo(x, y) {
+  if (!SPY) return;
+  const b = SPY_MAP.bounds;
+  SPY.target = { x: clamp(x, b.x1, b.x2), y: clamp(y, b.y1, b.y2) };
+  SPY.pending = null;
+  SPY.ctx = null;
+  SPY.sitting = false;
+  if (S.spy) S.spy.focus = null;
+  keys.spyPanel = undefined;
+}
+
+// 店員が近くにいると厨房をのぞきにくい
+const doorWatchers = () => Object.values(SPY?.npcs || {}).filter(n => dist(n, SPY_MAP.door) < 24).length;
+const peekChanceNow = st => clamp(peekChance(st) + (doorWatchers() ? -0.15 * doorWatchers() : 0.1), 0.05, 0.9);
+
+function spyFrame(dt) {
+  if (!S.spy || !SPY) return;
   const st = spyStore();
+  if (!st) return;
+  // 店長の移動
+  const P = SPY.p;
+  if (SPY.pending?.type === 'npc') {
+    const n = SPY.npcs[SPY.pending.id];
+    if (n) SPY.target = { x: n.x + 7, y: n.y };
+  }
+  if (SPY.target) {
+    if (moveTo(P, SPY.target, SPY_MAP.speed * dt)) {
+      SPY.target = null;
+      if (SPY.pending) {
+        SPY.ctx = SPY.pending;
+        SPY.sitting = SPY.pending.type === 'seat';
+        if (SPY.pending.type === 'npc') S.spy.focus = null;
+        SPY.pending = null;
+        keys.spyPanel = undefined;
+      }
+    }
+  } else P.moving = false;
+  // 店員の見回り（話している相手は立ち止まる）
+  for (const npc of st.npcs) {
+    const n = SPY.npcs[npc.id];
+    if (!n) continue;
+    const talking = SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id;
+    if (talking) { n.moving = false; n.flip = P.x < n.x; continue; }
+    if (n.wait > 0) { n.wait -= dt; n.moving = false; continue; }
+    if (moveTo(n, { x: n.tx, y: n.ty }, SPY_MAP.npcSpeed * dt)) {
+      const w = rand(SPY_MAP.route);
+      n.tx = w.x; n.ty = w.y;
+      n.wait = 1.5 + Math.random() * 3;
+    }
+  }
+  // 話している相手から離れたら会話をやめる
+  if (SPY.ctx?.type === 'npc') {
+    const n = SPY.npcs[SPY.ctx.id];
+    if (!n || dist(n, P) > SPY_MAP.reach + 6) { SPY.ctx = null; S.spy.focus = null; keys.spyPanel = undefined; }
+  }
+  if (currentScreen === 'town') renderSpyMap(st);
+}
+
+const spyEls = new Map();
+function spyEl(map, key, cls, html) {
+  let el = spyEls.get(key);
+  if (!el || !el.isConnected) {
+    el = document.createElement('div');
+    el.className = cls;
+    el.innerHTML = html;
+    map.appendChild(el);
+    spyEls.set(key, el);
+  }
+  el._seen = true;
+  return el;
+}
+
+function renderSpyMap(st) {
+  const map = $('spyMap');
+  if (!map) return;
+  for (const el of spyEls.values()) el._seen = false;
+  const P = SPY.p;
+  const me = spyEl(map, 'me', 'person staff me', PERSON_HTML);
+  placePerson(me, { ...P, look: protagLook() }, 'protag');
+  me.classList.toggle('sitting', SPY.sitting);
+  for (const npc of st.npcs) {
+    const n = SPY.npcs[npc.id];
+    if (!n) continue;
+    const el = spyEl(map, 'n' + npc.id, 'person npc', PERSON_HTML);
+    if (!el._init) { el._init = true; el.dataset.action = 'spyGo'; el.dataset.target = 'npc'; el.dataset.id = npc.id; }
+    placePerson(el, { ...n, look: npc.look }, 'customer');
+    const tag = el.querySelector('.tag');
+    const label = `${npc.ace ? '★' : ''}${npc.name}`;
+    if (tag.textContent !== label) { tag.textContent = label; tag.className = 'tag ' + (npc.ace ? 'owner' : 'perm'); }
+    const bubble = el.querySelector('.bubble');
+    const b = npc.aff >= 100 ? '💖' : SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id ? '💬' : '';
+    if (bubble.textContent !== b) bubble.textContent = b;
+  }
+  SPY.patrons.forEach((p, i) => {
+    const el = spyEl(map, 'p' + i, 'person patron', PERSON_HTML);
+    if (!el._init) { el._init = true; placePerson(el, { ...spySeat(p.table), look: p.look }, 'customer'); }
+  });
+  for (const [k, el] of spyEls) if (!el._seen) { el.remove(); spyEls.delete(k); }
+}
+
+function spyStaticHTML(st) {
   const type = storeType(st);
+  return `
+    <div class="spy-wall"><div class="window w1"></div><div class="spy-sign">${type.emoji} ${st.name}</div><div class="window w2"></div></div>
+    <div class="spy-counter">${st.recipes.slice(0, 2).map(r => `<span>${DISH[r].emoji}</span>`).join('')}</div>
+    <button class="spy-door" data-action="spyGo" data-target="door" aria-label="厨房の扉"><span>STAFF<br>ONLY</span></button>
+    <div class="spy-entrance">🚪</div>
+    ${SPY_MAP.tables.map((t, i) => `
+      <div class="chair" style="left:${spySeat(i).x}%;top:${spySeat(i).y}%;z-index:${9 + Math.round(spySeat(i).y)}">${CHAIR_SVG}</div>
+      <button class="table spy-table" data-action="spyGo" data-target="seat" data-id="${i}" aria-label="席${i + 1}"
+        style="left:${t.x}%;top:${t.y}%;z-index:${10 + t.y}"></button>`).join('')}`;
+}
+
+function spyPanelHTML(st) {
+  const ctx = SPY.ctx;
   const recipeLeft = st.recipes.some(r => !S.recipes.includes(r));
-  const key = ['spy', st.id, Math.round(st.alert), S.spy.seq, st.npcs.map(n => n.id + ':' + n.aff).join(','),
-    recipeLeft, S.money >= eatCost(st), S.money >= inviteCost(st), S.staff.length >= staffCap(), charm()].join('|');
-  setKeyed(el, 'town', key, `
-    <div class="spy-head">
-      <div><small>潜入中 🕵️</small><b>${type.emoji} ${st.name}</b><span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span></div>
+  let body = '<p class="note">💡 床をタップして歩く／🪑 席に座って注文／🚪 厨房の扉を調べる／🧑 店員に近づいて話す</p>';
+  if (SPY.pending) body = '<p class="note">移動中…</p>';
+  if (ctx?.type === 'seat') {
+    body = `<div class="spy-actions one">
+      <button class="act" data-action="spyEat" ${S.money >= eatCost(st) ? '' : 'disabled'}>
+        <b>🍽️ 注文して食べる</b><small>${yen(eatCost(st))}・${recipeLeft ? `レシピを閃く ${Math.round(eatChance(st) * 100)}%` : 'レシピは閃き済み'}</small></button></div>`;
+  } else if (ctx?.type === 'door') {
+    const w = doorWatchers();
+    body = `<p class="note ${w ? 'warn' : 'ok'}">${w ? `👀 近くに店員が${w}人いる…見られているかも` : '✨ 今なら誰も見ていない！'}</p>
+      <div class="spy-actions one">
+      <button class="act risky" data-action="spyPeek" ${recipeLeft ? '' : 'disabled'}>
+        <b>🔍 厨房をのぞく</b><small>${recipeLeft ? `レシピを閃く ${Math.round(peekChanceNow(st) * 100)}%・失敗すると警戒大` : 'レシピは閃き済み'}</small></button></div>`;
+  } else if (ctx?.type === 'npc') {
+    const n = st.npcs.find(x => x.id === ctx.id);
+    if (n) body = `<div class="staff-list">${npcRow(n, true, st)}</div>
+      ${S.staff.length >= staffCap() ? '<p class="note warn">スタッフがいっぱいなので、今は誘えません。</p>' : ''}`;
+  }
+  return `<div class="spy-talk">
+      <div class="spy-bust">${Stand.svg(protagStandLook(), S.wardrobe.eq, 'bust')}</div>
+      <div class="spy-msg ${S.spy.kind}">${S.spy.msg.replace(/\n/g, '<br>')}</div>
+    </div>
+    ${body}`;
+}
+
+function renderSpy() {
+  const st = spyStore();
+  const view = $('spyView');
+  if (!SPY || SPY.storeId !== st.id) spyInit(st);
+  const rebuilt = setKeyed(view, 'spyStatic', 'spy' + st.id, `
+    <div class="spy-top">
+      <div class="spy-title"><small>潜入中 🕵️ ${storeType(st).type}</small><b>${st.name}</b><span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span></div>
       <button class="btn ghost small" data-action="spyLeave">🚪 撤収</button>
     </div>
     <div class="alert-box">
-      <div class="alert-label"><span>🚨 警戒ゲージ</span><b>${Math.round(st.alert)}/100</b></div>
-      <div class="bar alert"><i style="width:${st.alert}%"></i></div>
-      <p class="note">失敗すると溜まり、満タンになると追い出されます。撤収すれば好感度は次回に持ち越せます。</p>
+      <div class="alert-label"><span>🚨 警戒ゲージ</span><b id="spyAlertNum"></b></div>
+      <div class="bar alert"><i id="spyAlertBar"></i></div>
     </div>
-    <div class="spy-scene">
-      <div class="spy-fig">${Chara.svg(protagLook(), 'protag', S.wardrobe.eq)}</div>
-      <div class="spy-msg ${S.spy.kind}">${S.spy.msg.replace(/\n/g, '<br>')}</div>
-    </div>
-    <div class="closet-stats center">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(st)}</b>（ドレスコード：${STYLES[type.style]}）</div>
-    <h3>行動</h3>
-    <div class="spy-actions">
-      <button class="act" data-action="spyEat" ${S.money >= eatCost(st) ? '' : 'disabled'}>
-        <b>🍽️ 料理を食べる</b><small>${yen(eatCost(st))}・${recipeLeft ? `レシピを閃く ${Math.round(eatChance(st) * 100)}%` : 'レシピは閃き済み'}</small></button>
-      <button class="act risky" data-action="spyPeek" ${recipeLeft ? '' : 'disabled'}>
-        <b>🔍 キッチンを調べる</b><small>${recipeLeft ? `レシピを閃く ${Math.round(peekChance(st) * 100)}%・失敗すると警戒大` : 'レシピは閃き済み'}</small></button>
-    </div>
-    <h3>店員を口説く</h3>
-    <p class="note">「👀 観察」で性格や好みのヒントを集め、「💬 話す」で話題を選びます。好感度 60 で転職の動機がわかり、100 で誘えます。</p>
-    <div class="staff-list">${st.npcs.length ? st.npcs.map(n => npcRow(n, true, st)).join('') : '<p class="note">この店にはもう引き抜ける店員がいません。</p>'}</div>
-    ${S.staff.length >= staffCap() ? '<p class="note warn">スタッフがいっぱいなので、今は誘えません。</p>' : ''}`);
+    <div class="spy-map-box"><div id="spyMap" class="spy-map style-${storeType(st).style}">${spyStaticHTML(st)}</div></div>
+    <div class="spy-stats" id="spyStats"></div>
+    <div id="spyPanel" class="spy-panel"></div>`);
+  // 店内を作り直したときだけ、人物の表示を作り直す
+  if (rebuilt) { spyEls.clear(); keys.spyPanel = undefined; }
+  $('spyAlertNum').textContent = `${Math.round(st.alert)}/100`;
+  $('spyAlertBar').style.width = st.alert + '%';
+  $('spyStats').textContent = `💖 魅力 ${charm()}　🕶️ 馴染み ${blend(st)}（ドレスコード：${STYLES[storeType(st).style]}）`;
+  const ctx = SPY.ctx;
+  const key = [S.spy.seq, ctx ? ctx.type + (ctx.id ?? ctx.i ?? '') : '', !!SPY.pending, ctx?.type === 'door' ? doorWatchers() : '',
+    st.npcs.map(n => n.id + ':' + n.aff + ':' + Object.keys(n.known).length).join(','), S.spy.focus ? S.spy.focus.id + S.spy.focus.mode : '',
+    S.money >= eatCost(st), S.staff.length >= staffCap()].join('|');
+  setKeyed($('spyPanel'), 'spyPanel', key, spyPanelHTML(st));
 }
 
 function storeCard(st) {
@@ -818,7 +1012,10 @@ function storeCard(st) {
 
 function renderTown(el) {
   ensureTown();
-  if (spyStore()) return renderSpy(el);
+  const spying = !!spyStore();
+  el.hidden = spying;
+  $('spyView').hidden = !spying;
+  if (spying) return renderSpy();
   const now = Date.now();
   const key = ['town', S.town.stores.map(st => [st.id, st.npcs.length, st.npcs.map(n => n.aff).join('/'), st.recipes.join('/'),
     st.bannedUntil > now, st.battleCd > now, Math.round(currentAlert(st) / 5)].join(':')).join(','),
@@ -827,7 +1024,7 @@ function renderTown(el) {
     BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(',')].join('|');
   setKeyed(el, 'town', key, `
     <div class="protag-card">
-      <div class="protag-fig">${Chara.svg(protagLook(), 'protag', S.wardrobe.eq)}</div>
+      <div class="protag-fig">${Stand.svg(protagStandLook(), S.wardrobe.eq, 'bust')}</div>
       <div class="info">
         <div class="name">店長 <small>22歳</small></div>
         <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(null)}</b></div>
@@ -876,8 +1073,16 @@ function townTick() {
   if (S.town && Date.now() >= S.town.refreshAt && !S.spy) { refreshTown(); keys.town = undefined; save(); }
 }
 
+document.addEventListener('click', e => {
+  const map = e.target.closest('#spyMap');
+  if (!map || e.target.closest('[data-action]')) return;
+  const r = map.getBoundingClientRect();
+  spyMoveTo((e.clientX - r.left) / r.width * 100, (e.clientY - r.top) / r.height * 100);
+});
+
 function townAction(d) {
   switch (d.action) {
+    case 'spyGo': spyGo(d.target, +d.id); break;
     case 'dispatch': dispatchSel = []; openDispatch(+d.store); break;
     case 'pickMember': pickMember(+d.store, +d.id); break;
     case 'startBattle': startBattle(+d.store); break;
