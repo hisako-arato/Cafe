@@ -288,15 +288,19 @@ function computeLayout() {
   const cols = L.r >= 1.15 ? 3 : 4;
   const xs = cols === 3 ? [18, 50, 82] : [14, 38, 62, 86];
   const rows = Math.max(1, Math.ceil(S.tableCount / cols));
-  const top = L.r >= 1.15 ? u(64) : u(56);
+  const top = L.r >= 1.15 ? u(63) : u(56);
   const bottom = Math.max(top, logTop - u(7));
   const gap = rows > 1 ? (bottom - top) / (rows - 1) : 0;
   L.tables = Array.from({ length: MAX_TABLES }, (_, i) => ({ x: xs[i % cols], y: top + Math.floor(i / cols) * gap }));
   // 列の間隔が狭いときは人物・テーブルを縮める
   L.s = rows > 1 ? Math.max(0.62, Math.min(1, gap / u(19))) : 1;
   el.style.setProperty('--s', L.s);
-  L.counter = { x: 30, y: u(33) };
+  // 奥が厨房（スタッフ）、カウンターをはさんで手前が客席。行き来は右端のスタッフ出入口から
+  L.counter = { x: 40, y: u(36) };
+  L.gateK = { x: 87, y: u(36) };
+  L.gateH = { x: 87, y: u(46) };
   L.door = { x: 95, y: 99 };
+  el.style.setProperty('--counter-z', 10 + Math.round(u(41)));
   L.ver++;
 }
 computeLayout();
@@ -306,11 +310,11 @@ const standPos = ti => ({ x: L.tables[ti].x + 9 * L.s, y: L.tables[ti].y + u(3) 
 const stoveCols = () => S.stoves.length > 6 ? 4 : 3;
 function stovePos(i) {
   const cols = stoveCols(), col = i % cols, row = Math.floor(i / cols);
-  return { x: 62 + 35 * (col + 0.5) / cols + row * 2.5, y: u(39 + row * 4) };
+  return { x: 57 + 40 * (col + 0.5) / cols + row * 2.5, y: u(27 + row * 3.5) };
 }
 function homeOf(s, idx) {
   const i = idx ?? S.staff.indexOf(s);
-  return { x: 6 + (i % 7) * 8, y: u(41 + Math.floor(i / 7) * 5) };
+  return { x: 5 + (i % 8) * 6.5, y: u(36 - Math.floor(i / 8) * 4.5) };
 }
 
 function stoveInfo(i) {
@@ -549,6 +553,18 @@ function moveTo(o, p, step) {
   return false;
 }
 
+// 厨房と客席をまたぐときはスタッフ出入口を通る
+const zoneOf = y => y <= L.gateK.y + 0.01 ? 0 : y >= L.gateH.y - 0.01 ? 2 : 1;
+function walkTo(o, p, step) {
+  const zo = zoneOf(o.y), zp = zoneOf(p.y) === 0 ? 0 : 2;
+  if (zo === zp) return moveTo(o, p, step);
+  const near = zp === 0 ? L.gateK : L.gateH, back = zp === 0 ? L.gateH : L.gateK;
+  // 出入口の手前まで来たら、扉を抜けて反対側へ
+  const via = zo === 1 || (o.x === back.x && o.y === back.y) ? near : back;
+  moveTo(o, via, step);
+  return false;
+}
+
 function spawnCustomer() {
   const ti = tables.findIndex(t => t.state === 'free');
   if (ti < 0) return false;
@@ -661,7 +677,7 @@ function update(dt) {
 
   S.staff.forEach((s, i) => {
     if (s.away) {
-      if (s.walkOut && moveTo(s, L.door, speedOf(s) * dt)) s.walkOut = false;
+      if (s.walkOut && walkTo(s, L.door, speedOf(s) * dt)) s.walkOut = false;
       return;
     }
     if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) {
@@ -672,15 +688,15 @@ function update(dt) {
     const step = speedOf(s) * dt;
     const k = s.task;
     if (!k) {
-      if (moveTo(s, homeOf(s, i), step)) s.flip = false;
+      if (walkTo(s, homeOf(s, i), step)) s.flip = false;
       return;
     }
     if (k.type === 'serve') {
       const c = customers.find(c => c.id === k.cid);
       if (!c || c.state !== 'wait') { cancelTaskOf(s); return; }
       if (k.phase === 'counter') {
-        if (moveTo(s, L.counter, step)) k.phase = 'table';
-      } else if (moveTo(s, standPos(c.table), step)) {
+        if (walkTo(s, L.counter, step)) k.phase = 'table';
+      } else if (walkTo(s, standPos(c.table), step)) {
         c.state = 'eat';
         c.dish = k.dish;
         c.eat = EAT_SEC;
@@ -691,7 +707,7 @@ function update(dt) {
       const st = S.stoves[k.stove];
       if (!st || !st.dish || st.cook !== s.id) { s.task = null; return; }
       if (k.phase === 'go') {
-        if (moveTo(s, stovePos(k.stove), step)) { k.phase = 'work'; s.flip = false; }
+        if (walkTo(s, stovePos(k.stove), step)) { k.phase = 'work'; s.flip = false; }
       } else {
         st.progress = Math.min(st.duration, st.progress + dt * 1000 * cookRate(s));
         if (st.progress >= st.duration) {
@@ -705,7 +721,7 @@ function update(dt) {
       const t = tables[k.table];
       if (!t || t.state !== 'dirty') { s.task = null; return; }
       if (k.phase === 'go') {
-        if (moveTo(s, standPos(k.table), step)) { k.phase = 'work'; k.t = cleanTime(s); }
+        if (walkTo(s, standPos(k.table), step)) { k.phase = 'work'; k.t = cleanTime(s); }
       } else {
         k.t -= dt;
         if (k.t <= 0) { t.state = 'free'; t.cleaner = null; s.task = null; }
@@ -838,6 +854,9 @@ function renderFloor() {
     if (!el._seen) { el.remove(); floorEls.delete(key); }
   }
 
+  // スタッフ出入口（通っている人がいれば開く）
+  $('staffGate').classList.toggle('open', S.staff.some(s => !s.away && Math.abs(s.x - L.gateK.x) < 6 && s.y > L.gateK.y - u(3) && s.y < L.gateH.y + u(2)));
+
   // カウンター
   const counterKey = S.counter.map(st => st.dish + st.n).join(',');
   setKeyed($('counter'), 'counter', counterKey,
@@ -871,8 +890,8 @@ function renderFloor() {
     ...(n('chandelier') ? [at('chandelier', 60, 0, '<i></i><i></i><i></i>')] : []),
   ].join(''));
   setKeyed($('floorDecor'), 'floorDecor', decorKey, [
-    ...[[4, u(32)], [59.5, u(32)], [96, u(46)], [96, 99 - u(15)]].slice(0, n('plant')).map(([x, y]) => at('plant', x, y, '🪴')),
-    ...(n('jukebox') ? [at('record', 4.5, u(47), '📻')] : []),
+    ...[[74, u(50)], [26, u(50)], [97, u(60)], [96, 99 - u(15)]].slice(0, n('plant')).map(([x, y]) => at('plant', x, y, '🪴')),
+    ...(n('jukebox') ? [at('record', 4.5, u(50), '📻')] : []),
   ].join(''));
 
   // メニュー黒板
@@ -1200,6 +1219,7 @@ function openHelp() {
       <li>条件を満たすと街に<b>👑 名店（ボス）</b>が現れます。料理勝負で勝つと<b>限定アイテム</b>、潜入や勝負で<b>固有レシピ</b>、口説き落とすと専用の制服を着た<b>エース</b>が手に入ります。3つそろえると制覇です。</li>
       <li>潜入中は客席を自分で歩けます。店員はカウンターの向こうの厨房にいます。床をタップで移動、席に座って注文、カウンターの切れ目のスイングドアの前でのぞく、店員をタップするとカウンター越しに話せます。黄色い扇形は店員の視線。厨房の前にいるところや、うろうろしているところを見られると警戒が上がります。物陰（🪴🗂️🧥）に隠れると見つからず、警戒が下がります。</li>
       <li>うまくいかないときは店員の「💰 買収」。お金で好感度を上げる（心付け）、警戒を下げる（口止め料）、レシピを買う、すぐに引き抜く（引き抜き料）ができます。</li>
+      <li>魅力が高いと、格下の店の店員は店長に<b>メロメロ</b>になります（💓ドキドキ→😍メロメロ→💘イチコロ）。イチコロなら魅力だけでその場でスカウトできます。</li>
       <li>「👗 身支度」で着替えると<b>魅力</b>（口説く成功率）と<b>馴染み</b>（警戒されにくさ）が変わります。お店のドレスコードに合う服だと馴染みやすくなります。</li>
       <li>条件を満たしたら「ショップ」で<b>🏪 店舗ランク</b>を上げましょう。屋台から始まり、ランクが上がるほどコンロ・テーブル・スタッフ・設備強化の上限が増えます。データは自動で保存されます。</li>
     </ul>

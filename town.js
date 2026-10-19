@@ -167,6 +167,29 @@ function charmFor(npc) {
   return c;
 }
 
+// ===== メロメロ（魅力が高いと、格下の店の店員が店長に夢中になる）=====
+// 名店は格 +2 として数える
+const MERO = [
+  null,
+  { gap: 1, ratio: 1.2, icon: '💓', label: 'ドキドキ', desc: '話しかける成功率 +15%・好感度の上がり方 ×1.5' },
+  { gap: 2, ratio: 1.5, icon: '😍', label: 'メロメロ', desc: '成功率 +30%・好感度 ×2・視線で怪しまれない・誘い文句を外しても断られない' },
+  { gap: 3, ratio: 2.0, icon: '💘', label: 'イチコロ', desc: '店長の魅力だけでその場でスカウトできる' },
+];
+const gradeGap = st => maxGrade() - st.g - (st.boss ? 2 : 0);
+function meroLv(npc, st) {
+  if (!st) return 0;
+  const gap = gradeGap(st), r = charmFor(npc) / npc.ideal;
+  for (let lv = 3; lv >= 1; lv--) if (gap >= MERO[lv].gap && r >= MERO[lv].ratio) return lv;
+  return 0;
+}
+// 次の段階に必要な魅力（格が足りないときは null）
+function meroNext(npc, st) {
+  const lv = meroLv(npc, st);
+  const m = MERO[lv + 1];
+  if (!m || gradeGap(st) < m.gap) return null;
+  return { ...m, need: Math.ceil(npc.ideal * m.ratio) };
+}
+
 // 失敗したときの警戒の増え方（馴染みが高いほど小さい）
 const alertMult = store => clamp(1 - blend(store) / 120, 0.3, 1.3);
 
@@ -434,7 +457,8 @@ function topicKind(npc, topic) {
 }
 function talkChance(npc, topic) {
   const k = topic ? topicKind(npc, topic) : '';
-  const base = 0.4 + (charmFor(npc) - npc.ideal) / 80 + (k === 'like' ? 0.25 : k === 'dislike' ? -0.3 : 0);
+  const mero = meroLv(npc, spyStore());
+  const base = 0.4 + (charmFor(npc) - npc.ideal) / 80 + (k === 'like' ? 0.25 : k === 'dislike' ? -0.3 : 0) + (mero >= 2 ? 0.3 : mero ? 0.15 : 0);
   return clamp(base, 0.05, 0.95);
 }
 const inviteCost = st => st.g * 150;
@@ -606,8 +630,9 @@ function spyTalk(npcId, topic) {
   const kind = topicKind(npc, topic);
   const line = TOPIC_LINES[topic];
   if (Math.random() < talkChance(npc, topic)) {
+    const mero = meroLv(npc, st);
     const gain = kind === 'dislike' ? 5
-      : Math.round(12 + Math.random() * 8 + (kind === 'like' ? 16 : 0) + Math.max(0, (charmFor(npc) - npc.ideal) / 5));
+      : Math.round((12 + Math.random() * 8 + (kind === 'like' ? 16 : 0) + Math.max(0, (charmFor(npc) - npc.ideal) / 5)) * (mero >= 2 ? 2 : mero ? 1.5 : 1));
     const before = npc.aff;
     npc.aff = Math.min(100, npc.aff + gain);
     let hint = kind === 'like' ? reveal(npc, 'like:' + topic) : '';
@@ -651,7 +676,7 @@ function spyInvite(npcId, motive) {
     if (S.money < inviteCost(st)) return;
     S.money -= inviteCost(st);
   }
-  if (personaOf(npc).motive === motive) {
+  if (personaOf(npc).motive === motive || meroLv(npc, st) >= 2) {
     const msg = joinFromStore(st, npc, '口説き落とされて');
     spySay(`💖 ${npc.name}：${rand(SPY_LINES.invite)}\n${msg}`, 'good');
     addLog(msg, true);
@@ -663,6 +688,20 @@ function spyInvite(npcId, motive) {
     S.spy.focus = null;
     if (raiseAlert(st, 18)) return;
   }
+  save();
+}
+
+// イチコロ：店長の魅力だけでスカウト
+function spyCharm(npcId) {
+  if (SPY?.ctx?.type !== 'npc' || SPY.ctx.id !== npcId) return;
+  const st = spyStore();
+  const npc = st && st.npcs.find(n => n.id === npcId);
+  if (!npc || meroLv(npc, st) < 3 || S.staff.length >= staffCap()) return;
+  const msg = joinFromStore(st, npc, '店長の魅力にメロメロになって');
+  spySay(`💘 ${npc.name}：「ひと目見たときから…あなたのお店で働きたいって思ってました！」\n${msg}`, 'good');
+  addLog(msg, true);
+  addXp(st.g * 3);
+  S.spy.focus = null;
   save();
 }
 
@@ -787,16 +826,18 @@ function hintChips(n) {
 function npcRow(n, spying, st) {
   const focus = spying && S.spy.focus && S.spy.focus.id === n.id ? S.spy.focus.mode : null;
   const full = S.staff.length >= staffCap();
+  const mero = meroLv(n, st), next = meroNext(n, st);
   return `<div class="npc-card ${focus ? 'open' : ''}">
     <div class="row npc">
       ${card(n, 'customer', n.stars)}
       <div class="info">
-        <div class="name">${NATIONS[n.nation].flag} ${n.name}さん ${n.ace ? '<span class="badge ace">エース</span>' : ''}</div>
+        <div class="name">${NATIONS[n.nation].flag} ${n.name}さん ${n.ace ? '<span class="badge ace">エース</span>' : ''}${mero ? `<span class="badge mero lv${mero}">${MERO[mero].icon} ${MERO[mero].label}</span>` : ''}</div>
         <div class="sub">${n.title}　<span class="stars">${starStr(n.stars)}</span>　理想の高さ ${n.ideal}</div>
         <div class="bar aff"><i style="width:${n.aff}%"></i></div>
         <div class="sub">好感度 ${Math.round(n.aff)}/100</div>
       </div>
       ${spying ? `<div class="staff-actions">
+        ${mero >= 3 ? `<button class="btn pink small" data-action="spyCharm" data-id="${n.id}" ${full ? 'disabled' : ''}>💘 スカウト</button>` : ''}
         ${n.aff >= 100
           ? `<button class="btn pink small" data-action="spyFocus" data-mode="invite" data-id="${n.id}" ${full ? 'disabled' : ''}>💖 誘う</button>`
           : `<button class="btn small" data-action="spyFocus" data-mode="talk" data-id="${n.id}">💬 話す</button>`}
@@ -804,6 +845,7 @@ function npcRow(n, spying, st) {
         <button class="btn gold small" data-action="spyFocus" data-mode="bribe" data-id="${n.id}">💰 買収</button>
       </div>` : ''}
     </div>
+    ${mero || next ? `<p class="mero-note">${mero ? `${MERO[mero].icon} 店長に${MERO[mero].label}：${MERO[mero].desc}` : ''}${next ? `${mero ? '<br>' : ''}あと魅力 ${next.need - charmFor(n)} で ${next.icon} ${next.label}` : ''}</p>` : ''}
     ${hintChips(n)}
     ${focus === 'talk' ? `<div class="choices">${Object.entries(TOPICS).map(([t, label]) => {
       const kind = n.known['like:' + t] ? 'like' : n.known.dislike && personaOf(n).dislike === t ? 'dislike' : '';
@@ -812,7 +854,7 @@ function npcRow(n, spying, st) {
     ${focus === 'invite' ? `<div class="choices invite">${Object.entries(MOTIVES).map(([m, mv]) => `
       <button class="choice ${n.known.motive && personaOf(n).motive === m ? 'like' : ''}" data-action="spyInvite" data-id="${n.id}" data-motive="${m}"
         ${m === 'money' && S.money < inviteCost(st) ? 'disabled' : ''}>${mv.line}${m === 'money' ? `<small>支度金 ${yen(inviteCost(st))}</small>` : ''}</button>`).join('')}
-      </div><p class="note">相手の「動機」に合った誘い文句でないと断られます。</p>` : ''}
+      </div><p class="note">${mero >= 2 ? '😍 メロメロなので、どの誘い文句でもOK！' : '相手の「動機」に合った誘い文句でないと断られます。'}</p>` : ''}
     ${focus === 'bribe' ? `<div class="choices invite">${Object.entries(BRIBES).map(([k, b]) => {
       const block = bribeBlock(k, st, n), cost = bribeCost(k, st, n);
       return `<button class="choice bribe" data-action="spyBribe" data-id="${n.id}" data-kind="${k}" ${block || S.money < cost ? 'disabled' : ''}>
@@ -1009,7 +1051,7 @@ function watchersOfMe(st) {
   if (!SPY || SPY.hidden) return [];
   return st.npcs.filter(npc => {
     const n = SPY.npcs[npc.id];
-    return n && !(SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id) && sees(n, SPY.p, st);
+    return n && !(SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id) && meroLv(npc, st) < 2 && sees(n, SPY.p, st);
   });
 }
 const doorWatchers = () => { const st = spyStore(); return st ? watchersOfMe(st).length : 0; };
@@ -1141,7 +1183,7 @@ function renderSpyMap(st) {
       d += ` L${(ex + Math.cos(a) * r).toFixed(1)} ${(ey + Math.sin(a) * r).toFixed(1)}`;
     }
     path.setAttribute('d', d + ' Z');
-    path.setAttribute('class', 'cone' + (SPY.spotted.includes(npc.id) ? ' alert' : '') + (talking ? ' off' : ''));
+    path.setAttribute('class', 'cone' + (SPY.spotted.includes(npc.id) ? ' alert' : '') + (talking ? ' off' : '') + (meroLv(npc, st) >= 2 ? ' mero' : ''));
   }
   for (const npc of st.npcs) {
     const n = SPY.npcs[npc.id];
@@ -1153,7 +1195,8 @@ function renderSpyMap(st) {
     const label = `${npc.ace ? '★' : ''}${npc.name}`;
     if (tag.textContent !== label) { tag.textContent = label; tag.className = 'tag ' + (npc.ace ? 'owner' : 'perm'); }
     const bubble = el.querySelector('.bubble');
-    const b = SPY.spotted.includes(npc.id) ? '❗' : npc.aff >= 100 ? '💖' : SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id ? '💬' : '';
+    const mero = meroLv(npc, st);
+    const b = SPY.spotted.includes(npc.id) ? '❗' : npc.aff >= 100 || mero >= 3 ? '💖' : mero ? MERO[mero].icon : SPY.ctx?.type === 'npc' && SPY.ctx.id === npc.id ? '💬' : '';
     if (bubble.textContent !== b) bubble.textContent = b;
   }
   SPY.patrons.forEach((p, i) => {
@@ -1283,6 +1326,8 @@ function storeCard(st) {
     </div>` : ''}
     <div class="chips">
       <span class="chip diff ${d.cls}">${d.label}</span>
+      ${(() => { const lv = Math.max(0, ...st.npcs.map(n => meroLv(n, st))), c = st.npcs.filter(n => meroLv(n, st) === lv).length;
+        return lv ? `<span class="chip mero">${MERO[lv].icon} ${MERO[lv].label} ${c}人</span>` : ''; })()}
       ${st.recipes.filter(r => !S.recipes.includes(r)).map(r => `<span class="chip">📖 ${DISH[r].emoji} ${DISH[r].name}</span>`).join('')}
       ${alert > 0 ? `<span class="chip bad">🚨 警戒 ${alert}</span>` : ''}
       ${banned ? `<span class="chip bad">🚫 出禁 あと<span data-until="${st.bannedUntil}"></span></span>` : ''}
@@ -1384,6 +1429,7 @@ function townAction(d) {
     case 'spyTalk': spyTalk(+d.id, d.topic); break;
     case 'spyObserve': spyObserve(+d.id); break;
     case 'spyInvite': spyInvite(+d.id, d.motive); break;
+    case 'spyCharm': spyCharm(+d.id); break;
     case 'spyBribe': spyBribe(+d.id, d.kind); break;
     case 'hair': changeHair(d.kind, d.id, d.store ? +d.store : null); break;
     case 'spyLeave': endSpy(`🚪 「${spyStore()?.name}」から撤収しました。好感度は次回に持ち越せます`); break;
