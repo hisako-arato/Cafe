@@ -7,8 +7,26 @@ const PATIENCE_SEC = 45;    // お客さんが料理を待てる時間（秒）
 const EAT_SEC = 4;          // 食事にかかる時間（秒）
 const CUST_SPEED = 22;      // お客さんの歩く速さ（%/秒）
 const CHEAPEST_RATE = 0.8;  // お客さんが一番安い料理を頼む確率
-const MAX_STOVES = 6;
-const MAX_TABLES = 8;
+const MAX_STOVES = 8;        // 全ランクを通しての上限
+const MAX_TABLES = 12;
+
+// 店舗ランク：上げるとコンロ・テーブル・スタッフ・設備強化の上限が増える
+const RANKS = [
+  { name: '屋台',             icon: '🛖', stoves: 2, tables: 3,  staff: 3 },
+  { name: '喫茶店',           icon: '☕', stoves: 3, tables: 4,  staff: 5,  cost: 600,   need: { level: 3,  served: 40,   perm: 1 } },
+  { name: 'カフェ',           icon: '🏠', stoves: 4, tables: 6,  staff: 7,  cost: 2500,  need: { level: 6,  served: 180,  perm: 3 } },
+  { name: '人気カフェ',       icon: '🏡', stoves: 5, tables: 8,  staff: 9,  cost: 8000,  need: { level: 10, served: 500,  perm: 5 } },
+  { name: '有名店',           icon: '🏛️', stoves: 6, tables: 10, staff: 12, cost: 25000, need: { level: 15, served: 1200, perm: 7 } },
+  { name: '2階席のある名店', icon: '🏰', stoves: 8, tables: 12, staff: 15, cost: 70000, need: { level: 20, served: 3000, perm: 10 } },
+];
+
+// 設備強化（上限は店舗ランク + 1、最大 Lv6）
+const UPGRADES = {
+  stove: { name: 'コンロ強化',   icon: '♨️', base: 300, desc: lv => `調理速度 +${lv * 15}%・1回にできる量 +${lv}人前` },
+  table: { name: 'テーブル強化', icon: '🪑', base: 250, desc: lv => `代金 +${lv * 10}%・お客さんが待てる時間 +${lv * 10}%` },
+};
+
+const POSTS = { any: '両方', hall: 'ホール', kitchen: '厨房' };
 
 const DISHES = [
   { id: 'coffee',  name: 'コーヒー',       emoji: '☕', time: 5,   cost: 5,   servings: 4, price: 12, xp: 1,  level: 1 },
@@ -56,12 +74,14 @@ function newGame() {
     xp: 0,
     contracts: 1,
     contractsBought: 0,
+    rank: 0,
+    up: { stove: 0, table: 0 },
     stoves: [newStove(), newStove()],
     tableCount: 2,
     decor: {},
     counter: [],
     staff: [{ id: 1, name: '店長', g: 'm', nation: null, look: Chara.OWNER_LOOK,
-      stars: 3, type: 'perm', expireAt: 0, owner: true }],
+      stars: 3, type: 'perm', expireAt: 0, owner: true, post: 'any' }],
     nextId: 2,
     stats: { served: 0, hired: 0, promoted: 0 },
     seenHelp: false,
@@ -83,13 +103,24 @@ function load() {
   let s = newGame();
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) s = Object.assign(newGame(), JSON.parse(raw));
+    if (raw) {
+      const data = JSON.parse(raw);
+      s = Object.assign(newGame(), data);
+      // 店舗ランク導入前のデータは、今の設備が収まるランクから始める
+      if (data.rank == null) s.rank = fitRank(s);
+    }
   } catch (e) { /* 保存データが読めなくても新規で始める */ }
   return migrate(s);
 }
 
+function fitRank(s) {
+  const i = RANKS.findIndex(r => r.stoves >= s.stoves.length && r.tables >= s.tableCount && r.staff >= s.staff.length);
+  return i < 0 ? RANKS.length - 1 : i;
+}
+
 // 古い保存データを今の形にそろえる
 function migrate(s) {
+  s.up = Object.assign({ stove: 0, table: 0 }, s.up);
   const now = Date.now();
   s.stoves = s.stoves.map(st => {
     if ('duration' in st) return st;
@@ -98,6 +129,7 @@ function migrate(s) {
     return { dish: st.dish, progress: Math.min(duration, now - st.start), duration, cook: null };
   });
   for (const m of s.staff) {
+    if (!m.post) m.post = 'any';
     if (m.look) continue;
     if (m.owner) { m.look = Chara.OWNER_LOOK; m.g = 'm'; continue; }
     const p = randomPerson();
@@ -110,8 +142,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner, post })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -168,18 +200,26 @@ function initRuntime() {
 
 // ===== 計算 =====
 const popularity = () => DECOR.reduce((sum, d) => sum + (S.decor[d.id] || 0) * d.pop, 0);
-const staffCap = () => Math.min(12, 2 + S.level);
+const rankOf = () => RANKS[S.rank];
+const staffCap = () => rankOf().staff;
+const stoveCap = () => rankOf().stoves;
+const tableCap = () => rankOf().tables;
+const upMax = () => Math.min(6, S.rank + 1);
+const upPrice = k => Math.round(UPGRADES[k].base * Math.pow(2.2, S.up[k]));
+const permCount = () => S.staff.filter(s => s.type === 'perm' && !s.owner).length;
+const servingsOf = d => d.servings + S.up.stove;
+const patienceSec = () => PATIENCE_SEC * (1 + S.up.table * 0.1);
 const xpNeeded = l => Math.round(12 * Math.pow(l, 1.5));
 const spawnInterval = () => Math.max(2, 8 - popularity() * 0.06 - S.level * 0.15);
 const speedOf = s => 14 + s.stars * 5;
 const cleanTime = s => 2.4 - s.stars * 0.3;
-const cookRate = s => 0.8 + (s.stars - 1) * 0.1;
+const cookRate = s => (0.8 + (s.stars - 1) * 0.1) * (1 + S.up.stove * 0.15);
 const scoutFee = stars => 20 + stars * stars * 15;
 const stovePrice = () => Math.round(150 * Math.pow(2, S.stoves.length - 2));
 const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const contractPrice = () => Math.round(800 * Math.pow(1.5, S.contractsBought));
-const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.01));
+const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.01) * (1 + S.up.table * 0.1));
 const roleOf = s => s.owner ? 'owner' : s.type;
 const displayName = p => p.owner ? p.name : p.name + 'さん';
 
@@ -194,22 +234,26 @@ function computeLayout() {
   const logTop = log && h ? log.offsetTop / h * 100 : 86;
   const cols = L.r >= 1.15 ? 3 : 4;
   const xs = cols === 3 ? [18, 50, 82] : [14, 38, 62, 86];
-  const rows = Math.ceil(MAX_TABLES / cols);
+  const rows = Math.max(1, Math.ceil(S.tableCount / cols));
   const top = L.r >= 1.15 ? u(64) : u(56);
   const bottom = Math.max(top, logTop - u(7));
   const gap = rows > 1 ? (bottom - top) / (rows - 1) : 0;
   L.tables = Array.from({ length: MAX_TABLES }, (_, i) => ({ x: xs[i % cols], y: top + Math.floor(i / cols) * gap }));
+  // 列の間隔が狭いときは人物・テーブルを縮める
+  L.s = rows > 1 ? Math.max(0.62, Math.min(1, gap / u(19))) : 1;
+  el.style.setProperty('--s', L.s);
   L.counter = { x: 30, y: u(33) };
   L.door = { x: 95, y: 99 };
   L.ver++;
 }
 computeLayout();
 
-const seatPos = ti => ({ x: L.tables[ti].x - 9, y: L.tables[ti].y + u(3) });
-const standPos = ti => ({ x: L.tables[ti].x + 9, y: L.tables[ti].y + u(3) });
+const seatPos = ti => ({ x: L.tables[ti].x - 9 * L.s, y: L.tables[ti].y + u(3) * L.s });
+const standPos = ti => ({ x: L.tables[ti].x + 9 * L.s, y: L.tables[ti].y + u(3) * L.s });
+const stoveCols = () => S.stoves.length > 6 ? 4 : 3;
 function stovePos(i) {
-  const col = i % 3, row = Math.floor(i / 3);
-  return { x: 62 + 35 * (col + 0.5) / 3 + row * 2.5, y: u(39 + row * 4) };
+  const cols = stoveCols(), col = i % cols, row = Math.floor(i / cols);
+  return { x: 62 + 35 * (col + 0.5) / cols + row * 2.5, y: u(39 + row * 4) };
 }
 function homeOf(s, idx) {
   const i = idx ?? S.staff.indexOf(s);
@@ -286,9 +330,10 @@ function collectStove(i) {
   const st = S.stoves[i];
   if (!st || stoveInfo(i).kind !== 'ready') return;
   const d = DISH[st.dish];
-  addToCounter(d.id, d.servings);
+  const n = servingsOf(d);
+  addToCounter(d.id, n);
   Object.assign(st, newStove());
-  toast(`${d.emoji} ${d.name}を${d.servings}人前カウンターに並べました`);
+  toast(`${d.emoji} ${d.name}を${n}人前カウンターに並べました`);
   addXp(d.xp);
   save();
 }
@@ -318,7 +363,7 @@ function hire(cid) {
   customers.splice(customers.indexOf(c), 1);
   const s = {
     id: S.nextId++, name: c.name, g: c.g, nation: c.nation, look: c.look, stars: c.stars,
-    type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000, owner: false,
+    type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000, owner: false, post: 'any',
     x: c.x, y: c.y, task: null,
   };
   S.staff.push(s);
@@ -346,6 +391,16 @@ function removeStaff(s, message) {
   save();
 }
 
+function setPost(id, post) {
+  const s = S.staff.find(s => s.id === id);
+  if (!s || !POSTS[post]) return;
+  s.post = post;
+  // 持ち場の外の仕事をしていたらやめる（調理の進み具合は残る）
+  const k = s.task;
+  if (k && ((post === 'hall' && k.type === 'cook') || (post === 'kitchen' && k.type !== 'cook'))) cancelTaskOf(s);
+  save();
+}
+
 function fire(id) {
   const s = S.staff.find(s => s.id === id);
   if (!s || s.owner) return;
@@ -353,19 +408,50 @@ function fire(id) {
   closeModal();
 }
 
+function rankNeeds() {
+  const next = RANKS[S.rank + 1];
+  if (!next) return [];
+  const n = next.need;
+  return [
+    { label: `レベル ${n.level} 以上`, ok: S.level >= n.level, now: `Lv${S.level}` },
+    { label: `接客 ${n.served.toLocaleString('ja-JP')}人`, ok: S.stats.served >= n.served, now: `${S.stats.served.toLocaleString('ja-JP')}人` },
+    { label: `正社員 ${n.perm}人`, ok: permCount() >= n.perm, now: `${permCount()}人` },
+  ];
+}
+
+function rankUp() {
+  const next = RANKS[S.rank + 1];
+  if (!next || S.money < next.cost || !rankNeeds().every(r => r.ok)) return;
+  S.money -= next.cost;
+  S.rank++;
+  toast(`${next.icon} お店が「${next.name}」にランクアップしました！`, true);
+  toast(`コンロ ${next.stoves}台・テーブル ${next.tables}卓・スタッフ ${next.staff}人・強化 Lv${upMax()} まで広げられます`);
+  save();
+}
+
+function upgrade(k) {
+  const p = upPrice(k);
+  if (!UPGRADES[k] || S.up[k] >= upMax() || S.money < p) return;
+  S.money -= p;
+  S.up[k]++;
+  toast(`${UPGRADES[k].icon} ${UPGRADES[k].name}が Lv${S.up[k]} になりました（${UPGRADES[k].desc(S.up[k])}）`);
+  save();
+}
+
 function buy(kind, id) {
   if (kind === 'stove') {
     const p = stovePrice();
-    if (S.stoves.length >= MAX_STOVES || S.money < p) return;
+    if (S.stoves.length >= stoveCap() || S.money < p) return;
     S.money -= p;
     S.stoves.push(newStove());
     toast('🔥 コンロを増やしました');
   } else if (kind === 'table') {
     const p = tablePrice();
-    if (S.tableCount >= MAX_TABLES || S.money < p) return;
+    if (S.tableCount >= tableCap() || S.money < p) return;
     S.money -= p;
     S.tableCount++;
     tables.push({ state: 'free', cust: null, cleaner: null });
+    computeLayout();
     toast('🪑 テーブルを増やしました');
   } else if (kind === 'decor') {
     const d = DECOR.find(d => d.id === id);
@@ -389,6 +475,7 @@ function resetGame() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 無視 */ }
   S = newGame();
   S.seenHelp = true;
+  computeLayout();
   initRuntime();
   for (const el of floorEls.values()) el.remove();
   floorEls.clear();
@@ -416,7 +503,7 @@ function spawnCustomer() {
   const c = {
     id: uid++, ...randomPerson(), stars: rollStars(),
     x: L.door.x, y: L.door.y, table: ti, state: 'in',
-    patience: PATIENCE_SEC, server: null, dish: null, eat: 0, flip: true,
+    patience: patienceSec(), maxPatience: patienceSec(), server: null, dish: null, eat: 0, flip: true,
   };
   tables[ti].state = 'occupied';
   tables[ti].cust = c.id;
@@ -449,9 +536,10 @@ function cancelTaskOf(s) {
   s.task = null;
 }
 
-// 仕事の優先順位：配膳 → 調理 → 片付け
+// 持ち場（ホール／厨房／両方）の範囲で、配膳 → 調理 → 片付け の順に仕事を探す
 function findTask(s) {
-  if (S.counter.length) {
+  const post = s.post || 'any';
+  if (post !== 'kitchen' && S.counter.length) {
     const c = customers
       .filter(c => c.state === 'wait' && !c.server)
       .sort((a, b) => a.patience - b.patience)[0];
@@ -461,13 +549,13 @@ function findTask(s) {
       return;
     }
   }
-  const si = S.stoves.findIndex(st => st.dish && st.cook == null && st.progress < st.duration);
+  const si = post === 'hall' ? -1 : S.stoves.findIndex(st => st.dish && st.cook == null && st.progress < st.duration);
   if (si >= 0) {
     S.stoves[si].cook = s.id;
     s.task = { type: 'cook', stove: si, phase: 'go' };
     return;
   }
-  const ti = tables.findIndex(t => t.state === 'dirty' && !t.cleaner);
+  const ti = post === 'kitchen' ? -1 : tables.findIndex(t => t.state === 'dirty' && !t.cleaner);
   if (ti >= 0) {
     tables[ti].cleaner = s.id;
     s.task = { type: 'clean', table: ti, phase: 'go', t: 0 };
@@ -658,7 +746,7 @@ function renderFloor() {
         : bkey === 'angry' ? '<span>💢</span>' : '';
     }
     if (bkey === 'wait') {
-      const r = c.patience / PATIENCE_SEC;
+      const r = c.patience / c.maxPatience;
       const bar = bubble.querySelector('.pbar');
       bar.classList.toggle('low', r < 0.3);
       bar.firstChild.style.width = (r * 100).toFixed(1) + '%';
@@ -698,6 +786,7 @@ function renderFloor() {
   // ミニコンロ
   const infos = S.stoves.map((_, i) => stoveInfo(i));
   const stoveKey = S.stoves.map((st, i) => infos[i].kind + st.dish).join(',');
+  $('miniStoves').style.gridTemplateColumns = `repeat(${stoveCols()}, 1fr)`;
   setKeyed($('miniStoves'), 'mini', stoveKey, S.stoves.map((st, i) => {
     const k = infos[i].kind;
     if (k === 'idle') return `<button class="mini-stove idle" data-action="pick" data-i="${i}" aria-label="コンロ${i + 1}">🔥</button>`;
@@ -753,6 +842,7 @@ function renderHud() {
   $('xpbar').style.width = Math.min(100, S.xp / xpNeeded(S.level) * 100) + '%';
   $('contracts').textContent = S.contracts;
   $('pop').textContent = popularity();
+  $('rankName').textContent = rankOf().icon + ' ' + rankOf().name;
   const ready = S.stoves.some((_, i) => stoveInfo(i).kind === 'ready');
   $('kitchenDot').hidden = !ready;
   $('cookDot').hidden = !ready;
@@ -767,7 +857,7 @@ function renderCook(el) {
     <div class="counter-line">${S.counter.length
       ? S.counter.map(c => `<span class="chip">${DISH[c.dish].emoji} ${DISH[c.dish].name} ×${c.n}</span>`).join('')
       : '<span class="chip">まだありません</span>'}</div>
-    <h3>コンロ（${S.stoves.length}/${MAX_STOVES}）</h3>
+    <h3>コンロ（${S.stoves.length}/${stoveCap()}）</h3>
     <p class="note">料理を注文すると、手の空いたスタッフがコンロに入って調理します。調理中のスタッフは配膳できません。
     できあがったらタップしてカウンターに並べましょう。</p>
     <div class="stoves">${S.stoves.map((st, i) => {
@@ -779,7 +869,7 @@ function renderCook(el) {
       const d = DISH[st.dish];
       if (s.kind === 'ready') {
         return `<button class="stove ready" data-action="collect" data-i="${i}">
-          <div class="big">${d.emoji}</div>できあがり！<span>タップでカウンターへ（${d.servings}人前）</span></button>`;
+          <div class="big">${d.emoji}</div>できあがり！<span>タップでカウンターへ（${servingsOf(d)}人前）</span></button>`;
       }
       const who = s.kind === 'cooking' ? `${displayName(s.cook)}が調理中`
         : s.cook ? `${displayName(s.cook)}が向かっています` : '調理スタッフ待ち…';
@@ -806,11 +896,12 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type).join(','), S.contracts, staffCap()].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post).join(','), S.contracts, staffCap()].join('|');
   setKeyed(el, 'staff', key, `
     <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 永久雇用契約 × ${S.contracts}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約はレベルアップかショップで手に入ります。</p>
+    <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
         ${card(s, roleOf(s), s.stars)}
@@ -820,6 +911,8 @@ function renderStaff(el) {
           <div class="sub">速さ <span class="stars">${starStr(s.stars)}</span>　<span data-status="${s.id}"></span></div>
           ${s.type === 'part' ? `<div class="bar contract"><i data-contract="${s.id}"></i></div>
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
+          <div class="posts">${Object.entries(POSTS).map(([p, label]) =>
+            `<button class="post-btn ${s.post === p ? 'on' : ''}" data-action="post" data-id="${s.id}" data-post="${p}">${label}</button>`).join('')}</div>
         </div>
         <div class="staff-actions">
           ${s.type === 'part'
@@ -851,17 +944,44 @@ function itemRow(ico, name, sub, price, action, extra, disabled, label) {
 
 function renderShop(el) {
   const sp = stovePrice(), tp = tablePrice(), cp = contractPrice();
-  const stoveMax = S.stoves.length >= MAX_STOVES, tableMax = S.tableCount >= MAX_TABLES;
-  const key = [sp, tp, cp, stoveMax, tableMax,
+  const stoveMax = S.stoves.length >= stoveCap(), tableMax = S.tableCount >= tableCap();
+  const next = RANKS[S.rank + 1];
+  const needs = rankNeeds();
+  const canRank = !!next && needs.every(r => r.ok);
+  const key = [S.rank, sp, tp, cp, stoveMax, tableMax, S.up.stove, S.up.table,
+    needs.map(r => r.ok + r.now).join(','), next && S.money >= next.cost,
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
+    ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
     S.money >= sp, S.money >= tp, S.money >= cp].join('|');
+  const r = rankOf();
   setKeyed(el, 'shop', key, `
+    <h3>🏪 店舗ランク</h3>
+    <div class="rank-card">
+      <div class="rank-now"><span class="rank-icon">${r.icon}</span><div><small>ランク${S.rank + 1}</small><b>${r.name}</b>
+        <div class="sub">コンロ ${r.stoves}台・テーブル ${r.tables}卓・スタッフ ${r.staff}人・強化 Lv${upMax()} まで</div></div></div>
+      ${next ? `
+        <div class="rank-next">次のランク：${next.icon} <b>${next.name}</b>
+          <div class="sub">コンロ ${next.stoves}台・テーブル ${next.tables}卓・スタッフ ${next.staff}人・強化 Lv${Math.min(6, S.rank + 2)} まで</div></div>
+        <ul class="needs">${needs.map(n => `<li class="${n.ok ? 'ok' : ''}">${n.ok ? '✅' : '⬜'} ${n.label}<span>いま ${n.now}</span></li>`).join('')}</ul>
+        <button class="btn wide" data-action="rankup" ${canRank && S.money >= next.cost ? '' : 'disabled'}>
+          ${canRank ? `${yen(next.cost)} でランクアップ` : '条件を満たすとランクアップできます'}</button>`
+      : '<p class="note">最高ランクです！</p>'}
+    </div>
     <h3>設備</h3>
     <div class="item-list">
-      ${itemRow('🔥', 'コンロを増やす', `いま ${S.stoves.length}/${MAX_STOVES} 台`, sp, 'buy', 'data-kind="stove"',
-        stoveMax || S.money < sp, stoveMax ? '最大' : '')}
-      ${itemRow('🪑', 'テーブルを増やす', `いま ${S.tableCount}/${MAX_TABLES} 卓`, tp, 'buy', 'data-kind="table"',
-        tableMax || S.money < tp, tableMax ? '最大' : '')}
+      ${itemRow('🔥', 'コンロを増やす', `いま ${S.stoves.length}/${stoveCap()} 台`, sp, 'buy', 'data-kind="stove"',
+        stoveMax || S.money < sp, stoveMax ? '上限' : '')}
+      ${itemRow('🪑', 'テーブルを増やす', `いま ${S.tableCount}/${tableCap()} 卓`, tp, 'buy', 'data-kind="table"',
+        tableMax || S.money < tp, tableMax ? '上限' : '')}
+    </div>
+    <h3>設備強化</h3>
+    <div class="item-list">
+      ${Object.entries(UPGRADES).map(([k, u]) => {
+        const lv = S.up[k], max = lv >= upMax();
+        return itemRow(u.icon, `${u.name} <small>Lv${lv}/${upMax()}</small>`,
+          max ? `${u.desc(lv)}<br>${next ? 'ランクを上げると更に強化できます' : '最大まで強化しました'}` : `次：${u.desc(lv + 1)}`,
+          upPrice(k), 'upgrade', `data-kind="${k}"`, max || S.money < upPrice(k), max ? '上限' : '');
+      }).join('')}
     </div>
     <h3>内装（人気度が上がるとお客さんが増え、代金も上がります）</h3>
     <div class="item-list">
@@ -879,7 +999,7 @@ function renderShop(el) {
 function renderSettings() {
   const el = $('settings');
   const st = S.stats;
-  const key = [S.level, st.served, st.hired, st.promoted, S.staff.length, S.money].join('|');
+  const key = [S.rank, S.level, st.served, st.hired, st.promoted, S.staff.length, S.money].join('|');
   setKeyed(el, 'settings', key, `
     <h3>⚙️ 設定</h3>
     <div class="item-list">
@@ -888,6 +1008,7 @@ function renderSettings() {
     </div>
     <h3>📊 お店の記録</h3>
     <div class="stat-grid">
+      <div>店舗ランク<b>${rankOf().icon} ${rankOf().name}</b></div>
       <div>レベル<b>Lv${S.level}</b></div>
       <div>所持金<b>${yen(S.money)}</b></div>
       <div>接客したお客さん<b>${st.served.toLocaleString('ja-JP')}人</b></div>
@@ -961,7 +1082,7 @@ function openDishPicker(i) {
         <div class="ico">${d.emoji}</div>
         <div class="info"><div class="name">${d.name}</div>
           <div class="sub">${locked ? `レベル${d.level}で解禁` :
-            `⏱ ${fmtTime(d.time)}　🍽 ${d.servings}人前　1人前 ${yen(d.price)}`}</div></div>
+            `⏱ ${fmtTime(d.time)}　🍽 ${servingsOf(d)}人前　1人前 ${yen(d.price)}`}</div></div>
         <button class="btn" data-action="cook" data-i="${i}" data-dish="${d.id}"
           ${locked || S.money < d.cost ? 'disabled' : ''}>${locked ? '🔒' : yen(d.cost)}</button>
       </div>`;
@@ -986,7 +1107,7 @@ function openScout(cid) {
     </div>
     <p>アルバイトとしてスカウトしますか？ 契約期間は <b>${fmtTime(CONTRACT_SEC)}</b> です。
     あとで永久雇用契約を結べば正社員になります。</p>
-    ${full ? `<p class="warn">スタッフがいっぱいです（${S.staff.length}/${staffCap()}人）。レベルを上げると雇える人数が増えます。</p>` : ''}
+    ${full ? `<p class="warn">スタッフがいっぱいです（${S.staff.length}/${staffCap()}人）。店舗ランクを上げると雇える人数が増えます。</p>` : ''}
     <div class="actions">
       <button class="btn ghost" data-action="close">やめる</button>
       <button class="btn" data-action="hire" data-cid="${c.id}" ${full || S.money < fee ? 'disabled' : ''}>${yen(fee)} でスカウト</button>
@@ -1001,11 +1122,12 @@ function openHelp() {
     <ul>
       <li>下の<b>🍳 厨房</b>でコンロをタップして料理を注文します。手の空いた<b>スタッフがコンロに入って調理</b>します。できあがったらタップしてカウンターへ並べます。</li>
       <li>スタッフがカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
-      <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、人手が足りなくなったら雇いましょう。</li>
+      <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
-      <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約、「ショップ」で<b>コンロ・テーブル・内装</b>を買えます。データは自動で保存されます。</li>
+      <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
+      <li>条件を満たしたら「ショップ」で<b>🏪 店舗ランク</b>を上げましょう。屋台から始まり、ランクが上がるほどコンロ・テーブル・スタッフ・設備強化の上限が増えます。データは自動で保存されます。</li>
     </ul>
     <div class="actions"><button class="btn" data-action="close">はじめる</button></div>`);
 }
@@ -1062,6 +1184,9 @@ document.addEventListener('click', e => {
     case 'scout': openScout(+d.cid); break;
     case 'hire': hire(+d.cid); break;
     case 'promote': promote(+d.id); break;
+    case 'post': setPost(+d.id, d.post); break;
+    case 'rankup': rankUp(); break;
+    case 'upgrade': upgrade(d.kind); break;
     case 'askFire': {
       const s = S.staff.find(s => s.id === +d.id);
       if (!s) break;

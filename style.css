@@ -354,7 +354,7 @@ button {
 /* テーブル（大理石）と椅子 */
 .table {
   position: absolute;
-  width: 12cqw; height: 8.5cqw;
+  width: calc(12cqw * var(--s, 1)); height: calc(8.5cqw * var(--s, 1));
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background:
@@ -363,7 +363,7 @@ button {
   border: 2px solid #2b1d33;
   box-shadow: 0 1.2cqw 0 #3f2a1c, 0 2cqw 1cqw rgba(0,0,0,.18);
   display: grid; place-items: center;
-  font-size: 4.5cqw;
+  font-size: calc(4.5cqw * var(--s, 1));
 }
 .table.dirty::after {
   content: "";
@@ -372,13 +372,13 @@ button {
   background: radial-gradient(circle at 30% 60%, rgba(120,80,40,.35) 0 12%, transparent 13%),
               radial-gradient(circle at 70% 30%, rgba(120,80,40,.3) 0 10%, transparent 11%);
 }
-.chair { position: absolute; width: 7cqw; transform: translate(-50%, -96%); pointer-events: none; }
+.chair { position: absolute; width: calc(7cqw * var(--s, 1)); transform: translate(-50%, -96%); pointer-events: none; }
 .chair svg { width: 100%; height: auto; }
 
 /* 人物（座標は足元） */
 .person {
   position: absolute;
-  width: 13cqw;
+  width: calc(13cqw * var(--s, 1));
   transform: translate(-50%, -100%);
   pointer-events: none;
 }
@@ -653,3 +653,33 @@ button {
   background: var(--warn); border: 2px solid #fff;
 }
 .seg-btn .dot[hidden] { display: none; }
+
+/* 店舗ランク */
+.rank-chip {
+  font-size: .72rem; vertical-align: 3px; margin-left: 4px;
+  background: rgba(255,255,255,.18); border: 1.5px solid rgba(255,255,255,.7);
+  border-radius: 999px; padding: 1px 8px; text-shadow: none; letter-spacing: 0;
+}
+.rank-card {
+  border: 2px solid #c4b5fd; border-radius: 16px; padding: 12px;
+  background: linear-gradient(160deg, #faf5ff, #fff);
+}
+.rank-now { display: flex; gap: 10px; align-items: center; }
+.rank-now small { display: block; color: var(--muted); font-size: .72rem; font-weight: 800; }
+.rank-now b { font-size: 1.1rem; }
+.rank-icon { font-size: 2.2rem; }
+.rank-next { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: .9rem; }
+.needs { list-style: none; padding: 0; margin: 8px 0 10px; display: grid; gap: 4px; }
+.needs li { display: flex; justify-content: space-between; gap: 8px; font-size: .85rem; padding: 4px 8px; border-radius: 8px; background: var(--panel-2); }
+.needs li.ok { background: #ecfdf5; }
+.needs li span { color: var(--muted); font-size: .78rem; }
+.btn.wide { width: 100%; padding: 10px; }
+.row .name small { font-size: .75rem; color: var(--muted); font-weight: 800; }
+
+/* 持ち場 */
+.posts { display: flex; gap: 4px; margin-top: 6px; }
+.post-btn {
+  flex: 1; border: 2px solid var(--line); background: #fff; color: var(--muted);
+  border-radius: 8px; padding: 3px 0; font-size: .74rem; font-weight: 800;
+}
+.post-btn.on { background: #ede9fe; border-color: #8b5cf6; color: #5b21b6; }
