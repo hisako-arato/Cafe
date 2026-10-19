@@ -77,8 +77,25 @@ const NATIONS = {
 // 縦方向は床の縦横比で変わるので、レイアウトは computeLayout() で計算する。
 const L = { r: 0.9, ver: 0 };
 
+// 主人公の髪（美容院で変えられる）。髪型にも系統があり、セット効果に数える
+const HAIR_STYLES = {
+  long: { name: 'ロング', style: 'elegant' }, twin: { name: 'ツインテール', style: 'cute' },
+  pony: { name: 'ポニーテール', style: 'casual' }, bob: { name: 'ボブ', style: 'cool' },
+};
+const HAIR_COLORS = {
+  pink: { name: 'ピンク', c: '#f59ac0', c2: '#fde4ef' }, blonde: { name: '金髪', c: '#f6d66b', c2: '#fff4c2' },
+  silver: { name: '銀髪', c: '#d9dbe8', c2: '#ffffff' }, black: { name: '黒髪', c: '#2a2238', c2: '#5b4a78' },
+  aqua: { name: '水色', c: '#7dd3fc', c2: '#e0f6ff' }, purple: { name: '紫', c: '#a78bfa', c2: '#ede9fe' },
+  red: { name: '赤', c: '#ef4444', c2: '#fecaca' },
+};
+function protagLook(w = S.wardrobe) {
+  const h = w.hair;
+  return { ...Chara.OWNER_LOOK, style: h.style, hair: HAIR_COLORS[h.color].c, hair2: HAIR_COLORS[h.color].c2 };
+}
+
 // ===== 状態 =====
 function newGame() {
+  const wardrobe = { owned: ['maid'], eq: { body: 'maid', head: null, face: null, item: null }, hair: { style: 'long', color: 'pink' } };
   return {
     money: 150,
     level: 1,
@@ -91,14 +108,14 @@ function newGame() {
     tableCount: 2,
     decor: {},
     counter: [],
-    staff: [{ id: 1, name: '店長', g: 'm', nation: null, look: Chara.OWNER_LOOK,
+    staff: [{ id: 1, name: '店長', g: 'f', nation: null, look: protagLook(wardrobe),
       stars: 3, type: 'perm', expireAt: 0, owner: true, post: 'any' }],
     nextId: 2,
     stats: { served: 0, hired: 0, promoted: 0 },
     seenHelp: false,
     savedAt: Date.now(),
     recipes: [],
-    wardrobe: { owned: ['maid'], eq: { body: 'maid', head: null, face: null, item: null } },
+    wardrobe,
     town: null,
     battles: [],
     spy: null,
@@ -136,6 +153,7 @@ function fitRank(s) {
 
 // 古い保存データを今の形にそろえる
 function migrate(s) {
+  if (!s.wardrobe.hair) s.wardrobe.hair = { style: 'long', color: 'pink' };
   s.up = Object.assign({ stove: 0, table: 0 }, s.up);
   const now = Date.now();
   s.stoves = s.stoves.map(st => {
@@ -147,7 +165,7 @@ function migrate(s) {
   for (const m of s.staff) {
     if (!m.post) m.post = 'any';
     // 主人公（店長）はいつも最新の見た目で
-    if (m.owner) { m.look = Chara.OWNER_LOOK; m.g = 'f'; continue; }
+    if (m.owner) { m.look = protagLook(s.wardrobe); m.g = 'f'; continue; }
     // 勝負に出ていない人が出かけたままになっていたら戻す
     if (m.away && !(s.battles || []).some(b => b.members.includes(m.id))) m.away = null;
     if (m.look) continue;

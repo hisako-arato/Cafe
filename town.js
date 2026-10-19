@@ -46,6 +46,37 @@ const STORE_TYPES = [
 ];
 const NPC_TITLES = ['ホール係', 'キッチン担当', 'アルバイト', '皿洗い', '新人'];
 
+// 口説き落としの会話：話題・転職の動機・性格
+const TOPICS = { cooking: '🍳 料理の腕', money: '💰 お給料', dream: '🌈 将来の夢', holiday: '🏖️ 休日の過ごし方', complaint: '😤 職場の不満', fashion: '👗 おしゃれ' };
+const MOTIVES = {
+  skill: { label: '腕を磨きたい',   line: '「あなたの腕を、うちの看板にさせて！」' },
+  money: { label: 'お金がほしい',   line: '「お給料、今のお店より弾むよ！（支度金つき）」' },
+  env:   { label: '楽しく働きたい', line: '「うちは毎日笑いの絶えない職場だよ」' },
+  dream: { label: '夢を叶えたい',   line: '「あなたの夢、うちの店で一緒に叶えよう」' },
+};
+const PERSONAS = {
+  passion:  { name: '熱血',     likes: ['cooking', 'dream'],   dislike: 'complaint', motive: 'skill' },
+  cool:     { name: 'クール',   likes: ['fashion', 'money'],   dislike: 'dream',     motive: 'money' },
+  gentle:   { name: 'おっとり', likes: ['holiday', 'cooking'], dislike: 'money',     motive: 'env' },
+  dreamer:  { name: '夢見がち', likes: ['dream', 'fashion'],   dislike: 'money',     motive: 'dream' },
+  struggle: { name: '苦労人',   likes: ['complaint', 'money'], dislike: 'fashion',   motive: 'env' },
+  trendy:   { name: 'ミーハー', likes: ['fashion', 'holiday'], dislike: 'cooking',   motive: 'money' },
+};
+const TOPIC_LINES = {
+  cooking:   { ok: '「わかります！ 火加減って奥が深いですよね！」', ng: '「料理の話は…仕事中だけで十分です」' },
+  money:     { ok: '「そうなんです、もうちょっとお給料がほしくて…」', ng: '「お金の話ってちょっと苦手で…」' },
+  dream:     { ok: '「いつか自分の看板メニューを作るのが夢なんです！」', ng: '「夢とか、そういうのはちょっと…」' },
+  holiday:   { ok: '「休みの日は公園でのんびりするのが好きで〜」', ng: '「休日？ 寝てるだけですけど…」' },
+  complaint: { ok: '「聞いてください！ うちの店長ったら…」', ng: '「職場の悪口は言いたくないです」' },
+  fashion:   { ok: '「その服かわいい！ どこで買ったんですか？」', ng: '「服とか、あんまり興味なくて…」' },
+};
+const MOTIVE_REVEAL = {
+  skill: '「実は…もっと腕を磨ける場所を探してるんです」',
+  money: '「実は…正直、今のお給料じゃやっていけなくて」',
+  env:   '「実は…今の職場、ちょっとギスギスしてて」',
+  dream: '「実は…ずっと叶えたい夢があるんです」',
+};
+
 const TOWN_SIZE = 6;
 const TOWN_REFRESH_MS = 15 * 60 * 1000;
 const BAN_MS = 20 * 60 * 1000;
@@ -62,11 +93,23 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function equipped() {
   return Object.values(S.wardrobe.eq).filter(Boolean).map(id => OUTFIT[id]);
 }
+// 同じ系統でそろえるとセット効果（髪型の系統も数える）
+function setBonus() {
+  const counts = {};
+  for (const o of equipped()) counts[o.style] = (counts[o.style] || 0) + 1;
+  const hs = HAIR_STYLES[S.wardrobe.hair.style].style;
+  counts[hs] = (counts[hs] || 0) + 1;
+  const [style, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (n >= 5) return { style, n, charm: 22, blend: 6 };
+  if (n >= 4) return { style, n, charm: 15, blend: 3 };
+  if (n >= 3) return { style, n, charm: 8, blend: 0 };
+  return { style, n, charm: 0, blend: 0 };
+}
 function charm() {
-  return 20 + Math.floor(S.level / 2) + equipped().reduce((a, o) => a + o.charm, 0);
+  return 20 + Math.floor(S.level / 2) + equipped().reduce((a, o) => a + o.charm, 0) + setBonus().charm;
 }
 function blend(store) {
-  let b = 10 + equipped().reduce((a, o) => a + o.blend, 0);
+  let b = 10 + equipped().reduce((a, o) => a + o.blend, 0) + setBonus().blend;
   if (store) {
     // その店の雰囲気（ドレスコード）に合っていると馴染みやすい
     const style = storeType(store).style;
@@ -74,6 +117,13 @@ function blend(store) {
   }
   return b;
 }
+// 相手の好きな系統の服を着ていると、その人にだけ魅力が上がる
+function charmFor(npc) {
+  let c = charm();
+  for (const o of equipped()) if (o.style === npc.style) c += o.slot === 'body' ? 15 : 5;
+  return c;
+}
+
 // 失敗したときの警戒の増え方（馴染みが高いほど小さい）
 const alertMult = store => clamp(1 - blend(store) / 120, 0.3, 1.3);
 
@@ -86,8 +136,14 @@ function genNpc(g, ace, type) {
     title: ace ? type.ace : rand(NPC_TITLES),
     ideal: 12 + g * 10 + Math.round(Math.random() * 8 - 4) + (ace ? 8 : 0),
     aff: 0,
+    ...genPersona(),
   };
 }
+
+function genPersona() {
+  return { persona: rand(Object.keys(PERSONAS)), style: rand(Object.keys(STYLES)), known: {} };
+}
+const personaOf = n => PERSONAS[n.persona];
 
 function genStore(g) {
   const type = STORE_TYPES.find(t => t.g === g);
@@ -123,6 +179,7 @@ function refreshTown() {
 
 function ensureTown() {
   if (!S.town) S.town = { stores: [], refreshAt: 0, nextId: 1 };
+  for (const st of S.town.stores) for (const n of st.npcs) if (!n.persona) Object.assign(n, genPersona());
   if (!S.town.stores.length || Date.now() >= S.town.refreshAt) refreshTown();
 }
 
@@ -268,14 +325,22 @@ const SPY_LINES = {
   eatNg: ['…普通においしいだけだった', 'うーん、何が入ってるのかわからない', '食べるのに夢中で観察を忘れた…'],
   peekOk: ['厨房の壁にレシピのメモが！', '仕込みの手順をしっかり見た！', '調味料の配合をこっそりメモした！'],
   peekNg: ['「お客様、そちらは厨房です」', '扉を開けたら店長と目が合った…', '鍋をひっくり返しそうになった！'],
-  talkOk: ['「えっ、そんなふうに言われたの初めてです…」', '「ふふ、お客さん面白い人ですね」', '「また来てくれたら嬉しいな」', '「実は、今のお店ちょっと大変で…」'],
   talkNg: ['「…ご注文はお決まりですか？」', '「仕事中なので…」', '「店長に呼ばれちゃうので失礼します」', '（少し警戒されたみたい…）'],
   invite: ['「…あなたのお店、行ってみたいです！」', '「決めました。お世話になります！」', '「ずっとこんなお店で働きたかったんです」'],
 };
 const eatCost = st => 20 + st.g * 25;
 const eatChance = st => clamp(0.22 + blend(st) / 300 - (st.g - maxGrade()) * 0.02, 0.05, 0.6);
 const peekChance = st => clamp(0.45 + blend(st) / 250 - st.g * 0.02, 0.1, 0.8);
-const talkChance = npc => clamp(0.4 + (charm() - npc.ideal) / 80, 0.06, 0.92);
+function topicKind(npc, topic) {
+  const p = personaOf(npc);
+  return p.likes.includes(topic) ? 'like' : p.dislike === topic ? 'dislike' : '';
+}
+function talkChance(npc, topic) {
+  const k = topic ? topicKind(npc, topic) : '';
+  const base = 0.4 + (charmFor(npc) - npc.ideal) / 80 + (k === 'like' ? 0.25 : k === 'dislike' ? -0.3 : 0);
+  return clamp(base, 0.05, 0.95);
+}
+const inviteCost = st => st.g * 150;
 
 function spyStore() { return S.spy && storeById(S.spy.storeId); }
 const owner = () => S.staff.find(s => s.owner);
@@ -357,31 +422,87 @@ function spyPeek() {
   save();
 }
 
-function spyTalk(npcId) {
+// 話しかける相手を選ぶ（話題・誘い文句の選択肢を開く）
+function spyFocus(npcId, mode) {
+  if (!S.spy) return;
+  S.spy.focus = S.spy.focus && S.spy.focus.id === npcId && S.spy.focus.mode === mode ? null : { id: npcId, mode };
+  S.spy.seq++;
+}
+
+function reveal(npc, key) {
+  if (npc.known[key]) return '';
+  npc.known[key] = true;
+  const p = personaOf(npc);
+  if (key === 'persona') return `（${npc.name}さんは「${p.name}」タイプみたい）`;
+  if (key === 'style') return `（${npc.name}さんは${STYLES[npc.style]}系の服が好きみたい）`;
+  if (key === 'dislike') return `（${TOPICS[p.dislike]}の話は苦手みたい）`;
+  if (key === 'motive') return `（転職するなら「${MOTIVES[p.motive].label}」が決め手になりそう）`;
+  if (key.startsWith('like:')) return `（${TOPICS[key.slice(5)]}の話が好きみたい！）`;
+  return '';
+}
+
+function spyTalk(npcId, topic) {
   const st = spyStore();
   const npc = st && st.npcs.find(n => n.id === npcId);
-  if (!npc || npc.aff >= 100) return;
-  if (Math.random() < talkChance(npc)) {
-    const gain = Math.round(18 + Math.random() * 14 + Math.max(0, (charm() - npc.ideal) / 5));
+  if (!npc || npc.aff >= 100 || !TOPICS[topic]) return;
+  const kind = topicKind(npc, topic);
+  const line = TOPIC_LINES[topic];
+  if (Math.random() < talkChance(npc, topic)) {
+    const gain = kind === 'dislike' ? 5
+      : Math.round(12 + Math.random() * 8 + (kind === 'like' ? 16 : 0) + Math.max(0, (charmFor(npc) - npc.ideal) / 5));
+    const before = npc.aff;
     npc.aff = Math.min(100, npc.aff + gain);
-    spySay(`💬 ${npc.name}：${rand(SPY_LINES.talkOk)}\n（好感度 +${gain}${npc.aff >= 100 ? '・誘えそう！' : ''}）`, 'good');
+    let hint = kind === 'like' ? reveal(npc, 'like:' + topic) : '';
+    if (before < 60 && npc.aff >= 60 && !npc.known.motive) hint += `\n${npc.name}：${MOTIVE_REVEAL[personaOf(npc).motive]}${reveal(npc, 'motive')}`;
+    spySay(`💬 ${npc.name}：${kind === 'dislike' ? '「…はあ」' : line.ok}\n（好感度 +${gain}${npc.aff >= 100 ? '・誘えそう！' : ''}）${hint}`, 'good');
   } else {
-    npc.aff = Math.min(100, npc.aff + 2);
-    spySay(`💬 ${npc.name}：${rand(SPY_LINES.talkNg)}`, 'bad');
-    if (raiseAlert(st, 16)) return;
+    if (kind === 'dislike') npc.aff = Math.max(0, npc.aff - 3);
+    const hint = kind === 'dislike' ? reveal(npc, 'dislike') : '';
+    spySay(`💬 ${npc.name}：${kind === 'dislike' ? line.ng : rand(SPY_LINES.talkNg)}${hint ? '\n' + hint : ''}`, 'bad');
+    if (raiseAlert(st, kind === 'dislike' ? 24 : 14)) return;
   }
   save();
 }
 
-function spyInvite(npcId) {
+// 様子を見て、性格や好みのヒントを探る
+function spyObserve(npcId) {
   const st = spyStore();
   const npc = st && st.npcs.find(n => n.id === npcId);
-  if (!npc || npc.aff < 100 || S.staff.length >= staffCap()) return;
-  const line = rand(SPY_LINES.invite);
-  const msg = joinFromStore(st, npc, '口説き落とされて');
-  spySay(`💖 ${npc.name}：${line}\n${msg}`, 'good');
-  addLog(msg, true);
-  addXp(st.g * 3);
+  if (!npc) return;
+  const p = personaOf(npc);
+  const unknown = ['persona', 'style', 'dislike', ...p.likes.map(t => 'like:' + t)].filter(k => !npc.known[k]);
+  if (!unknown.length) {
+    spySay(`👀 ${npc.name}さんのことは、もう十分わかった気がする`, 'info');
+  } else if (Math.random() < clamp(0.65 + blend(st) / 400, 0.3, 0.9)) {
+    spySay(`👀 ${npc.name}さんの様子をそっと観察した…\n${reveal(npc, rand(unknown))}`, 'good');
+  } else {
+    spySay(`👀 ${npc.name}：「…あの、何か？」（じっと見すぎた！）`, 'bad');
+    if (raiseAlert(st, 8)) return;
+  }
+  save();
+}
+
+// 誘い文句を選んで誘う。相手の動機に合っていれば加入
+function spyInvite(npcId, motive) {
+  const st = spyStore();
+  const npc = st && st.npcs.find(n => n.id === npcId);
+  if (!npc || npc.aff < 100 || S.staff.length >= staffCap() || !MOTIVES[motive]) return;
+  if (motive === 'money') {
+    if (S.money < inviteCost(st)) return;
+    S.money -= inviteCost(st);
+  }
+  if (personaOf(npc).motive === motive) {
+    const msg = joinFromStore(st, npc, '口説き落とされて');
+    spySay(`💖 ${npc.name}：${rand(SPY_LINES.invite)}\n${msg}`, 'good');
+    addLog(msg, true);
+    addXp(st.g * 3);
+    S.spy.focus = null;
+  } else {
+    npc.aff = 70;
+    spySay(`💔 ${npc.name}：「…そういうことじゃ、ないんです」\n（誘い文句が響かなかった。好感度が下がった）`, 'bad');
+    S.spy.focus = null;
+    if (raiseAlert(st, 18)) return;
+  }
   save();
 }
 
@@ -393,13 +514,25 @@ function openCloset(storeId) {
   openModal(`<div class="sheet-head"><h2>👗 身支度</h2>
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
     <div class="closet-top">
-      <div class="closet-fig">${Chara.svg(Chara.OWNER_LOOK, 'protag', eq)}</div>
+      <div class="closet-fig">${Chara.svg(protagLook(), 'protag', eq)}</div>
       <div>
         <b>店長（22歳）</b>
         <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(st)}</b></div>
+        ${setLine()}
         ${st ? `<p class="note">行き先：${storeType(st).emoji} ${st.name}<br>ドレスコード：<b>${STYLES[storeType(st).style]}</b>（合う服だと馴染みやすい）</p>` : ''}
-        <p class="note">魅力は店員を口説く成功率、馴染みは失敗したときの警戒の増えにくさに効きます。</p>
+        <p class="note">魅力は店員を口説く成功率、馴染みは失敗したときの警戒の増えにくさに効きます。
+        同じ系統を3つ以上（髪型も含む）そろえるとセット効果。相手の好きな系統の服だと、その人にはさらに魅力的に見えます。</p>
       </div>
+    </div>
+    <h3>💇 美容院 <small class="note">変えるたびに ${yen(SALON_PRICE)}</small></h3>
+    <div class="outfit-list">${Object.entries(HAIR_STYLES).map(([id, h]) => `
+      <button class="outfit ${S.wardrobe.hair.style === id ? 'on' : ''}" data-action="hair" data-kind="style" data-id="${id}" data-store="${storeId || ''}"
+        ${S.wardrobe.hair.style !== id && S.money < SALON_PRICE ? 'disabled' : ''}><b>${h.name}</b><small>${STYLES[h.style]}</small></button>`).join('')}
+    </div>
+    <div class="hair-colors">${Object.entries(HAIR_COLORS).map(([id, h]) => `
+      <button class="hair-color ${S.wardrobe.hair.color === id ? 'on' : ''}" style="background:${h.c}" title="${h.name}" aria-label="${h.name}"
+        data-action="hair" data-kind="color" data-id="${id}" data-store="${storeId || ''}"
+        ${S.wardrobe.hair.color !== id && S.money < SALON_PRICE ? 'disabled' : ''}></button>`).join('')}
     </div>
     ${Object.entries(SLOTS).map(([slot, label]) => `
       <h3>${label}</h3>
@@ -425,6 +558,26 @@ function openCloset(storeId) {
   $('sheet').scrollTop = prevScroll;
 }
 
+const SALON_PRICE = 500;
+
+function setLine() {
+  const b = setBonus();
+  return b.charm ? `<div class="set-line">✨ ${STYLES[b.style]}セット（${b.n}点）：魅力 +${b.charm}${b.blend ? `・馴染み +${b.blend}` : ''}</div>`
+    : '<div class="sub">同じ系統を3つそろえるとセット効果</div>';
+}
+
+function changeHair(kind, id, storeId) {
+  const h = S.wardrobe.hair;
+  const table = kind === 'style' ? HAIR_STYLES : HAIR_COLORS;
+  if (!table[id] || h[kind] === id || S.money < SALON_PRICE) return;
+  S.money -= SALON_PRICE;
+  h[kind] = id;
+  owner().look = protagLook();
+  toast(`💇 美容院で${kind === 'style' ? '髪型' : '髪色'}を「${table[id].name}」にしました`);
+  save();
+  openCloset(storeId);
+}
+
 function equip(slot, id, storeId) {
   if (id && !S.wardrobe.owned.includes(id)) return;
   if (slot === 'body' && !id) return;
@@ -445,19 +598,46 @@ function buyOutfit(slot, id, storeId) {
 }
 
 // ===== 描画 =====
-function npcRow(n, spying) {
-  const p = Math.round(talkChance(n) * 100);
-  return `<div class="row npc">
-    ${card(n, 'customer', n.stars)}
-    <div class="info">
-      <div class="name">${NATIONS[n.nation].flag} ${n.name}さん ${n.ace ? '<span class="badge ace">エース</span>' : ''}</div>
-      <div class="sub">${n.title}　<span class="stars">${starStr(n.stars)}</span>　理想の高さ ${n.ideal}</div>
-      <div class="bar aff"><i style="width:${n.aff}%"></i></div>
-      <div class="sub">好感度 ${Math.round(n.aff)}/100${spying ? `　口説ける確率 ${p}%` : ''}</div>
+function hintChips(n) {
+  const p = personaOf(n), k = n.known;
+  const chip = (on, text) => `<span class="hint ${on ? '' : 'unknown'}">${on ? text : text.replace(/：.*/, '：？')}</span>`;
+  return `<div class="hints">
+    ${chip(k.persona, `性格：${p.name}`)}
+    ${chip(k.style, `好きな服：${STYLES[n.style]}`)}
+    ${p.likes.map(t => chip(k['like:' + t], `好き：${TOPICS[t]}`)).join('')}
+    ${chip(k.dislike, `苦手：${TOPICS[p.dislike]}`)}
+    ${chip(k.motive, `動機：${MOTIVES[p.motive].label}`)}
+  </div>`;
+}
+
+function npcRow(n, spying, st) {
+  const focus = spying && S.spy.focus && S.spy.focus.id === n.id ? S.spy.focus.mode : null;
+  const full = S.staff.length >= staffCap();
+  return `<div class="npc-card ${focus ? 'open' : ''}">
+    <div class="row npc">
+      ${card(n, 'customer', n.stars)}
+      <div class="info">
+        <div class="name">${NATIONS[n.nation].flag} ${n.name}さん ${n.ace ? '<span class="badge ace">エース</span>' : ''}</div>
+        <div class="sub">${n.title}　<span class="stars">${starStr(n.stars)}</span>　理想の高さ ${n.ideal}</div>
+        <div class="bar aff"><i style="width:${n.aff}%"></i></div>
+        <div class="sub">好感度 ${Math.round(n.aff)}/100</div>
+      </div>
+      ${spying ? `<div class="staff-actions">
+        ${n.aff >= 100
+          ? `<button class="btn pink small" data-action="spyFocus" data-mode="invite" data-id="${n.id}" ${full ? 'disabled' : ''}>💖 誘う</button>`
+          : `<button class="btn small" data-action="spyFocus" data-mode="talk" data-id="${n.id}">💬 話す</button>`}
+        <button class="btn ghost small" data-action="spyObserve" data-id="${n.id}">👀 観察</button>
+      </div>` : ''}
     </div>
-    ${spying ? (n.aff >= 100
-      ? `<button class="btn pink small" data-action="spyInvite" data-id="${n.id}" ${S.staff.length >= staffCap() ? 'disabled' : ''}>💖 誘う</button>`
-      : `<button class="btn small" data-action="spyTalk" data-id="${n.id}">💬 話す</button>`) : ''}
+    ${hintChips(n)}
+    ${focus === 'talk' ? `<div class="choices">${Object.entries(TOPICS).map(([t, label]) => {
+      const kind = n.known['like:' + t] ? 'like' : n.known.dislike && personaOf(n).dislike === t ? 'dislike' : '';
+      return `<button class="choice ${kind}" data-action="spyTalk" data-id="${n.id}" data-topic="${t}">${label}<small>${Math.round(talkChance(n, kind ? t : null) * 100)}%</small></button>`;
+    }).join('')}</div><p class="note">好きな話題は成功しやすく好感度も大きく上がります。苦手な話題は逆効果。</p>` : ''}
+    ${focus === 'invite' ? `<div class="choices invite">${Object.entries(MOTIVES).map(([m, mv]) => `
+      <button class="choice ${n.known.motive && personaOf(n).motive === m ? 'like' : ''}" data-action="spyInvite" data-id="${n.id}" data-motive="${m}"
+        ${m === 'money' && S.money < inviteCost(st) ? 'disabled' : ''}>${mv.line}${m === 'money' ? `<small>支度金 ${yen(inviteCost(st))}</small>` : ''}</button>`).join('')}
+      </div><p class="note">相手の「動機」に合った誘い文句でないと断られます。</p>` : ''}
   </div>`;
 }
 
@@ -466,7 +646,7 @@ function renderSpy(el) {
   const type = storeType(st);
   const recipeLeft = st.recipes.some(r => !S.recipes.includes(r));
   const key = ['spy', st.id, Math.round(st.alert), S.spy.seq, st.npcs.map(n => n.id + ':' + n.aff).join(','),
-    recipeLeft, S.money >= eatCost(st), S.staff.length >= staffCap(), charm()].join('|');
+    recipeLeft, S.money >= eatCost(st), S.money >= inviteCost(st), S.staff.length >= staffCap(), charm()].join('|');
   setKeyed(el, 'town', key, `
     <div class="spy-head">
       <div><small>潜入中 🕵️</small><b>${type.emoji} ${st.name}</b><span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span></div>
@@ -478,7 +658,7 @@ function renderSpy(el) {
       <p class="note">失敗すると溜まり、満タンになると追い出されます。撤収すれば好感度は次回に持ち越せます。</p>
     </div>
     <div class="spy-scene">
-      <div class="spy-fig">${Chara.svg(Chara.OWNER_LOOK, 'protag', S.wardrobe.eq)}</div>
+      <div class="spy-fig">${Chara.svg(protagLook(), 'protag', S.wardrobe.eq)}</div>
       <div class="spy-msg ${S.spy.kind}">${S.spy.msg.replace(/\n/g, '<br>')}</div>
     </div>
     <div class="closet-stats center">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(st)}</b>（ドレスコード：${STYLES[type.style]}）</div>
@@ -489,8 +669,9 @@ function renderSpy(el) {
       <button class="act risky" data-action="spyPeek" ${recipeLeft ? '' : 'disabled'}>
         <b>🔍 キッチンを調べる</b><small>${recipeLeft ? `レシピを閃く ${Math.round(peekChance(st) * 100)}%・失敗すると警戒大` : 'レシピは閃き済み'}</small></button>
     </div>
-    <h3>店員に話しかける</h3>
-    <div class="staff-list">${st.npcs.length ? st.npcs.map(n => npcRow(n, true)).join('') : '<p class="note">この店にはもう引き抜ける店員がいません。</p>'}</div>
+    <h3>店員を口説く</h3>
+    <p class="note">「👀 観察」で性格や好みのヒントを集め、「💬 話す」で話題を選びます。好感度 60 で転職の動機がわかり、100 で誘えます。</p>
+    <div class="staff-list">${st.npcs.length ? st.npcs.map(n => npcRow(n, true, st)).join('') : '<p class="note">この店にはもう引き抜ける店員がいません。</p>'}</div>
     ${S.staff.length >= staffCap() ? '<p class="note warn">スタッフがいっぱいなので、今は誘えません。</p>' : ''}`);
 }
 
@@ -538,7 +719,7 @@ function renderTown(el) {
     charm(), S.recipes.length, S.money >= refreshCost(), S.rank, S.spy ? 1 : 0].join('|');
   setKeyed(el, 'town', key, `
     <div class="protag-card">
-      <div class="protag-fig">${Chara.svg(Chara.OWNER_LOOK, 'protag', S.wardrobe.eq)}</div>
+      <div class="protag-fig">${Chara.svg(protagLook(), 'protag', S.wardrobe.eq)}</div>
       <div class="info">
         <div class="name">店長 <small>22歳</small></div>
         <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(null)}</b></div>
@@ -582,8 +763,11 @@ function townAction(d) {
     case 'startSpy': startSpy(+d.store); break;
     case 'spyEat': spyEat(); break;
     case 'spyPeek': spyPeek(); break;
-    case 'spyTalk': spyTalk(+d.id); break;
-    case 'spyInvite': spyInvite(+d.id); break;
+    case 'spyFocus': spyFocus(+d.id, d.mode); break;
+    case 'spyTalk': spyTalk(+d.id, d.topic); break;
+    case 'spyObserve': spyObserve(+d.id); break;
+    case 'spyInvite': spyInvite(+d.id, d.motive); break;
+    case 'hair': changeHair(d.kind, d.id, d.store ? +d.store : null); break;
     case 'spyLeave': endSpy(`🚪 「${spyStore()?.name}」から撤収しました。好感度は次回に持ち越せます`); break;
     case 'refreshTown':
       if (S.money < refreshCost()) break;
