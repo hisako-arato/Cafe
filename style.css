@@ -997,3 +997,11 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 }
 .spy-zone-label.kitchen { left: 2%; top: 26%; }
 .spy-zone-label.hall { left: 2%; top: 43%; }
+
+/* 買収 */
+.btn.gold { background: linear-gradient(#fde047, #eab308); color: #713f12; box-shadow: 0 3px 0 #a16207; text-shadow: none; }
+.choice.bribe { border-color: #fde68a; background: #fffbeb; }
+.choice.bribe .cost { color: #a16207; font-weight: 900; font-size: .8rem; }
+.choice.bribe { min-width: 0; }
+.choice.bribe span { min-width: 0; }
+.choice.bribe span small { color: var(--muted); font-weight: 600; white-space: normal; }

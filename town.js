@@ -439,6 +439,63 @@ function talkChance(npc, topic) {
 }
 const inviteCost = st => st.g * 150;
 
+// ===== 買収（お金で確実に進める）=====
+const bribeMult = n => n.bossAce ? 4 : n.ace ? 2.5 : 1;
+const BRIBES = {
+  gift:    { label: '💸 心付けを渡す',           desc: '好感度 +30（確実）' },
+  hush:    { label: '🤫 口止め料を払う',         desc: '警戒ゲージ -40' },
+  recipe:  { label: '📖 レシピを売ってもらう',   desc: 'この店のレシピを確実に入手' },
+  buyout:  { label: '💰 引き抜き料を払う',       desc: 'すぐにアルバイトとして加入（好感度が高いほど安い）' },
+};
+function bribeCost(kind, st, n) {
+  switch (kind) {
+    case 'gift':   return Math.round((60 + st.g * 50) * (n.ace ? 1.5 : 1));
+    case 'hush':   return 40 + st.g * 40;
+    case 'recipe': return Math.round((100 + st.g * st.g * 30) * (st.boss ? 3 : 1));
+    case 'buyout': return Math.round((300 + st.g * st.g * 80) * bribeMult(n) * (1 - n.aff / 200));
+  }
+  return Infinity;
+}
+// 使えない理由（使えるなら空）
+function bribeBlock(kind, st, n) {
+  if (kind === 'gift' && n.aff >= 100) return '好感度は満タン';
+  if (kind === 'hush' && st.alert < 1) return '警戒されていない';
+  if (kind === 'recipe' && !st.recipes.some(r => !S.recipes.includes(r))) return 'レシピは入手済み';
+  if (kind === 'buyout' && S.staff.length >= staffCap()) return 'スタッフがいっぱい';
+  return '';
+}
+
+function spyBribe(npcId, kind) {
+  if (SPY?.ctx?.type !== 'npc' || SPY.ctx.id !== npcId) return;
+  const st = spyStore();
+  const npc = st && st.npcs.find(n => n.id === npcId);
+  if (!npc || !BRIBES[kind] || bribeBlock(kind, st, npc)) return;
+  const cost = bribeCost(kind, st, npc);
+  if (S.money < cost) return;
+  S.money -= cost;
+  if (kind === 'gift') {
+    npc.aff = Math.min(100, npc.aff + 30);
+    let hint = '';
+    if (npc.aff >= 60 && !npc.known.motive) hint = `\n${npc.name}：${MOTIVE_REVEAL[personaOf(npc).motive]}${reveal(npc, 'motive')}`;
+    spySay(`💸 ${npc.name}：「えっ、こんなに…！ ありがとうございます♪」\n（好感度 +30${npc.aff >= 100 ? '・誘えそう！' : ''}）${hint}`, 'good');
+  } else if (kind === 'hush') {
+    st.alert = Math.max(0, st.alert - 40);
+    spySay(`🤫 ${npc.name}：「…何も見ていません。ごゆっくりどうぞ」\n（警戒ゲージ -40）`, 'good');
+  } else if (kind === 'recipe') {
+    const recipe = st.recipes.find(r => !S.recipes.includes(r));
+    spySay(`📖 ${npc.name}：「店長には内緒ですよ…」とメモを渡してくれた\n${learnRecipe(recipe, st)}`, 'good');
+    addLog(`💡 買収でレシピ「${DISH[recipe].name}」を手に入れました`, true);
+  } else if (kind === 'buyout') {
+    const msg = joinFromStore(st, npc, '引き抜き料で');
+    spySay(`💰 ${npc.name}：「そこまで言ってくれるなら…お世話になります！」\n${msg}`, 'good');
+    addLog(msg, true);
+    addXp(st.g * 2);
+    S.spy.focus = null;
+  }
+  S.spy.seq++;
+  save();
+}
+
 function spyStore() { return S.spy && storeById(S.spy.storeId); }
 const owner = () => S.staff.find(s => s.owner);
 
@@ -744,6 +801,7 @@ function npcRow(n, spying, st) {
           ? `<button class="btn pink small" data-action="spyFocus" data-mode="invite" data-id="${n.id}" ${full ? 'disabled' : ''}>💖 誘う</button>`
           : `<button class="btn small" data-action="spyFocus" data-mode="talk" data-id="${n.id}">💬 話す</button>`}
         <button class="btn ghost small" data-action="spyObserve" data-id="${n.id}">👀 観察</button>
+        <button class="btn gold small" data-action="spyFocus" data-mode="bribe" data-id="${n.id}">💰 買収</button>
       </div>` : ''}
     </div>
     ${hintChips(n)}
@@ -755,6 +813,11 @@ function npcRow(n, spying, st) {
       <button class="choice ${n.known.motive && personaOf(n).motive === m ? 'like' : ''}" data-action="spyInvite" data-id="${n.id}" data-motive="${m}"
         ${m === 'money' && S.money < inviteCost(st) ? 'disabled' : ''}>${mv.line}${m === 'money' ? `<small>支度金 ${yen(inviteCost(st))}</small>` : ''}</button>`).join('')}
       </div><p class="note">相手の「動機」に合った誘い文句でないと断られます。</p>` : ''}
+    ${focus === 'bribe' ? `<div class="choices invite">${Object.entries(BRIBES).map(([k, b]) => {
+      const block = bribeBlock(k, st, n), cost = bribeCost(k, st, n);
+      return `<button class="choice bribe" data-action="spyBribe" data-id="${n.id}" data-kind="${k}" ${block || S.money < cost ? 'disabled' : ''}>
+        <span>${b.label}<br><small>${block || b.desc}</small></span><small class="cost">${yen(cost)}</small></button>`;
+    }).join('')}</div><p class="note">お金で確実に進められます。格の高い店・エースほど高くつきます。</p>` : ''}
   </div>`;
 }
 
@@ -1189,7 +1252,8 @@ function renderSpy() {
   const key = [S.spy.seq, ctx ? ctx.type + (ctx.id ?? ctx.i ?? '') : '', !!SPY.pending, ctx?.type === 'door' ? doorWatchers() : '',
     SPY.hidden, SPY.wasSpotted, SPY.sitting,
     st.npcs.map(n => n.id + ':' + n.aff + ':' + Object.keys(n.known).length).join(','), S.spy.focus ? S.spy.focus.id + S.spy.focus.mode : '',
-    S.money >= eatCost(st), S.staff.length >= staffCap()].join('|');
+    S.money >= eatCost(st), S.staff.length >= staffCap(), Math.round(st.alert / 5),
+    S.spy.focus?.mode === 'bribe' ? S.money : ''].join('|');
   setKeyed($('spyPanel'), 'spyPanel', key, spyPanelHTML(st));
 }
 
@@ -1320,6 +1384,7 @@ function townAction(d) {
     case 'spyTalk': spyTalk(+d.id, d.topic); break;
     case 'spyObserve': spyObserve(+d.id); break;
     case 'spyInvite': spyInvite(+d.id, d.motive); break;
+    case 'spyBribe': spyBribe(+d.id, d.kind); break;
     case 'hair': changeHair(d.kind, d.id, d.store ? +d.store : null); break;
     case 'spyLeave': endSpy(`🚪 「${spyStore()?.name}」から撤収しました。好感度は次回に持ち越せます`); break;
     case 'refreshTown':
