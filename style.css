@@ -837,11 +837,11 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .outfit.locked { border-style: dashed; opacity: .7; background: var(--panel-2); }
 .outfit.limited b { color: #b45309; }
 
-/* ===== 立ち絵 ===== */
-.closet-fig { width: 130px; height: 300px; }
-.closet-fig svg { width: 100%; height: 100%; }
-.protag-fig { width: 104px; height: 156px; border-radius: 14px; overflow: hidden; background: radial-gradient(circle at 50% 40%, #fff, #fce7f3); }
-.protag-fig svg { width: 100%; height: 100%; }
+/* ===== 立ち絵（USE_STAND のとき）===== */
+.closet-fig.stand { width: 130px; height: 300px; }
+.closet-fig.stand svg { width: 100%; height: 100%; }
+.protag-fig.stand { width: 104px; height: 156px; border-radius: 14px; overflow: hidden; background: radial-gradient(circle at 50% 40%, #fff, #fce7f3); }
+.protag-fig.stand svg { width: 100%; height: 100%; }
 
 /* ===== 潜入：店内マップ ===== */
 .spy-view {
@@ -869,21 +869,12 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
   background: repeating-linear-gradient(90deg, #d9b48a 0 9%, #cfa77b 9% 9.4%);
   cursor: pointer;
 }
-.spy-map.style-cute { background: repeating-conic-gradient(#fde2ef 0 25%, #fbcfe8 0 50%) 0 0 / 10cqw 10cqw; }
-.spy-map.style-cool { background: repeating-linear-gradient(90deg, #6b7280 0 12%, #5b616d 12% 12.4%); }
-.spy-map.style-elegant { background: radial-gradient(circle at 50% 60%, #9f1239, #7f1d1d); }
-.spy-map.style-casual { background: repeating-conic-gradient(#f5f5f4 0 25%, #e7e5e4 0 50%) 0 0 / 10cqw 10cqw; }
 .spy-wall {
   position: absolute; left: 0; right: 0; top: 0; height: 22%;
   background: repeating-linear-gradient(90deg, #7c5a3a 0 3cqw, #8b6644 3cqw 6cqw);
   border-bottom: 3px solid #2b1d33; z-index: 1;
 }
-.spy-map.style-cute .spy-wall { background: repeating-linear-gradient(90deg, #f9a8d4 0 3cqw, #fbcfe8 3cqw 6cqw); }
-.spy-map.style-cool .spy-wall { background: #1f2937; }
-.spy-map.style-elegant .spy-wall { background: repeating-linear-gradient(90deg, #3f1d1d 0 3cqw, #4a2323 3cqw 6cqw); }
 .spy-wall .window { top: 2cqw; width: 12cqw; height: 10cqw; }
-.spy-wall .window.w1 { left: 4%; }
-.spy-wall .window.w2 { left: 54%; }
 .spy-sign {
   position: absolute; left: 22%; top: 3cqw; width: 28%;
   background: #fff7e6; border: 2px solid #2b1d33; border-radius: 1.4cqw;
@@ -911,7 +902,8 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .spy-stats { font-size: .78rem; text-align: center; color: var(--muted); font-weight: 700; }
 .spy-panel { flex: 0 1 auto; max-height: 42%; overflow-y: auto; overscroll-behavior: contain; }
 .spy-talk { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
-.spy-bust { width: 64px; height: 96px; flex: none; border-radius: 12px; overflow: hidden; background: radial-gradient(circle at 50% 40%, #fff, #fce7f3); border: 2px solid #f9a8d4; }
+.spy-bust { width: 64px; height: 64px; flex: none; border-radius: 12px; overflow: hidden; background: radial-gradient(circle at 50% 40%, #fff, #fce7f3); border: 2px solid #f9a8d4; }
+.spy-bust.stand { height: 96px; }
 .spy-bust svg { width: 100%; height: 100%; }
 .spy-talk .spy-msg { font-size: .82rem; }
 .spy-actions.one { grid-template-columns: 1fr; }
@@ -932,3 +924,33 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .spy-state.hide { background: #ede9fe; color: #5b21b6; }
 .spy-state.bad { background: #fee2e2; color: #b91c1c; animation: pulse 1s infinite; }
 .spy-state.ok { background: #dcfce7; color: #166534; }
+
+/* 潜入：店の種類ごとの壁と床 */
+.spy-map.lay-cafe { background: repeating-linear-gradient(90deg, #d9b48a 0 9%, #cfa77b 9% 9.4%); }
+.lay-cafe .spy-wall { background: repeating-linear-gradient(90deg, #7c5a3a 0 3cqw, #8b6644 3cqw 6cqw); }
+.spy-map.lay-bakery { background: repeating-conic-gradient(#fdf6e3 0 25%, #f3e3c3 0 50%) 0 0 / 9cqw 9cqw; }
+.lay-bakery .spy-wall { background: linear-gradient(#f5deb3 70%, #c08a5a 70%); }
+.spy-map.lay-diner { background: repeating-conic-gradient(#e7e5e4 0 25%, #d6d3d1 0 50%) 0 0 / 7cqw 7cqw; }
+.lay-diner .spy-wall { background: linear-gradient(#fef3c7 60%, #92400e 60%); }
+.spy-map.lay-fastfood { background: repeating-conic-gradient(#ffffff 0 25%, #fecaca 0 50%) 0 0 / 8cqw 8cqw; }
+.lay-fastfood .spy-wall { background: repeating-linear-gradient(90deg, #dc2626 0 6cqw, #facc15 6cqw 7cqw); }
+.spy-map.lay-yoshoku { background: repeating-linear-gradient(90deg, #6b4428 0 7%, #5b3a24 7% 7.4%); }
+.lay-yoshoku .spy-wall { background: linear-gradient(#14532d 65%, #3f2a1c 65%); }
+.spy-map.lay-patisserie { background: repeating-conic-gradient(#fde2ef 0 25%, #fbcfe8 0 50%) 0 0 / 10cqw 10cqw; }
+.lay-patisserie .spy-wall { background: repeating-linear-gradient(90deg, #f9a8d4 0 3cqw, #fbcfe8 3cqw 6cqw); }
+.spy-map.lay-sushi { background: repeating-linear-gradient(0deg, #bcc98a 0 12%, #a9b878 12% 12.5%); }
+.lay-sushi .spy-wall { background: linear-gradient(#f5efe0 70%, #6b4428 70%); }
+.spy-map.lay-italian { background: repeating-conic-gradient(#e8a27a 0 25%, #d98a62 0 50%) 0 0 / 10cqw 10cqw; }
+.lay-italian .spy-wall { background: repeating-linear-gradient(0deg, #b45309 0 3cqw, #9a3412 3cqw 3.3cqw), #b45309; }
+.spy-map.lay-french { background: radial-gradient(circle at 50% 60%, #9f1239, #7f1d1d); }
+.lay-french .spy-wall { background: linear-gradient(#3f1d1d 70%, #c8963e 70% 74%, #3f1d1d 74%); }
+
+/* カウンター席・飾り */
+.spy-stool {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 6.5cqw; height: 4.4cqw; border-radius: 50%; padding: 0; cursor: pointer;
+  background: radial-gradient(ellipse at 45% 35%, #f87171, #b91c1c); border: 2px solid #2b1d33;
+  box-shadow: 0 1cqw 0 #3f2a1c;
+}
+.spy-decor { position: absolute; transform: translate(-50%, -90%); font-size: 6cqw; line-height: 1; pointer-events: none; filter: drop-shadow(0 .5cqw 0 rgba(0,0,0,.2)); }
+.spy-decor.big { font-size: 11cqw; }

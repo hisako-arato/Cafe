@@ -617,7 +617,7 @@ function openCloset(storeId) {
   openModal(`<div class="sheet-head"><h2>👗 身支度</h2>
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
     <div class="closet-top">
-      <div class="closet-fig">${Stand.svg(protagStandLook(), eq)}</div>
+      <div class="closet-fig ${USE_STAND ? 'stand' : ''}">${protagFigure(eq)}</div>
       <div>
         <b>店長（22歳）</b>
         <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(st)}</b></div>
@@ -668,6 +668,14 @@ const SALON_PRICE = 500;
 
 // 立ち絵用の見た目（髪の色 ID も渡して、PNG 差し替えのキーに使う）
 const protagStandLook = () => ({ ...protagLook(), hairColorId: S.wardrobe.hair.color });
+
+// 立ち絵（stand.js）を使うか。準備ができるまでは 2頭身で表示する
+const USE_STAND = false;
+// 主人公の絵：bust を指定すると上半身（2頭身では顔アップ）
+function protagFigure(eq, bust) {
+  if (USE_STAND) return Stand.svg(protagStandLook(), eq, bust ? 'bust' : undefined);
+  return bust ? Chara.portrait(protagLook(), 'protag', eq) : Chara.svg(protagLook(), 'protag', eq);
+}
 
 function setLine() {
   const b = setBonus();
@@ -753,41 +761,114 @@ function npcRow(n, spying, st) {
 // ===== 潜入：ライバル店の店内マップ（店長を操作する）=====
 // 座標は % 単位（マップは正方形）。人物は足元の位置
 const SPY_MAP = {
-  door: { x: 84, y: 31 },           // 厨房の扉の前
   entrance: { x: 92, y: 97 },
-  tables: [{ x: 24, y: 52 }, { x: 60, y: 57 }, { x: 26, y: 80 }, { x: 64, y: 85 }],
-  route: [{ x: 18, y: 35 }, { x: 46, y: 37 }, { x: 72, y: 42 }, { x: 42, y: 66 }, { x: 80, y: 68 }, { x: 48, y: 92 }, { x: 84, y: 32 }],
   bounds: { x1: 4, x2: 96, y1: 31, y2: 98 },
   speed: 26, npcSpeed: 13, reach: 12,
-  // 隠れる場所（隠れている間は見つからず、警戒が下がっていく）
-  hides: [
-    { x: 70, y: 37, emoji: '🪴', name: '観葉植物の陰' },
-    { x: 8,  y: 66, emoji: '🗂️', name: 'ついたての陰' },
-    { x: 92, y: 60, emoji: '🧥', name: 'コート掛けの陰' },
-  ],
   // 店員の視線（扇形）
   sight: { r: 26, half: 0.62, bossR: 31 },
   doorZone: 14,       // 厨房の扉のまわり（ここを見られると怪しまれる）
   loiterSec: 5,       // 立ち止まって見られていると怪しまれるまでの秒数
 };
-const spySeat = i => ({ x: SPY_MAP.tables[i].x - 8, y: SPY_MAP.tables[i].y + 3 });
+// 店の種類ごとの店内レイアウト。座標は % 単位（マップは正方形、壁は上 22%）
+//   door：厨房の扉の位置（x）／counter：カウンター（x と幅）／windows：窓の位置（x）
+//   seats：席（round はテーブル＋椅子、stool はカウンター席）／hides：隠れる場所／decor：飾り
+const LAYOUTS = {
+  cafe: {
+    name: 'レトロな喫茶店', door: 84, counter: { x: 4, w: 42 }, windows: [52], counterItems: '☕🍰',
+    seats: [{ x: 24, y: 52 }, { x: 60, y: 57 }, { x: 26, y: 80 }, { x: 64, y: 85 }],
+    hides: [{ x: 70, y: 37, emoji: '🪴', name: '観葉植物の陰' }, { x: 8, y: 66, emoji: '🗂️', name: 'ついたての陰' }, { x: 92, y: 60, emoji: '🧥', name: 'コート掛けの陰' }],
+    decor: [{ x: 46, y: 96, e: '📻' }],
+  },
+  bakery: {
+    name: '焼きたてのパン屋', door: 86, counter: { x: 30, w: 40 }, windows: [6], counterItems: '🥐🥖🍞',
+    seats: [{ x: 18, y: 70 }, { x: 18, y: 92 }, { x: 62, y: 88 }],
+    hides: [{ x: 90, y: 54, emoji: '🧺', name: 'パンかごの陰' }, { x: 8, y: 46, emoji: '🪴', name: '観葉植物の陰' }],
+    decor: [{ x: 50, y: 46, e: '🥨', big: true }, { x: 78, y: 74, e: '🍩' }],
+  },
+  diner: {
+    name: '大衆食堂', door: 84, counter: { x: 4, w: 58 }, windows: [66], counterItems: '🍚🍲🍶',
+    seats: [{ x: 12, y: 37, t: 'stool' }, { x: 26, y: 37, t: 'stool' }, { x: 40, y: 37, t: 'stool' }, { x: 54, y: 37, t: 'stool' },
+      { x: 30, y: 70 }, { x: 72, y: 64 }, { x: 70, y: 88 }],
+    hides: [{ x: 93, y: 46, emoji: '🎐', name: 'のれんの陰' }, { x: 8, y: 90, emoji: '🗂️', name: 'ついたての陰' }],
+    decor: [{ x: 50, y: 96, e: '🫖' }],
+  },
+  fastfood: {
+    name: 'ファストフード店', door: 84, counter: { x: 4, w: 66 }, windows: [], counterItems: '🍔🍟🥤',
+    seats: [{ x: 16, y: 52 }, { x: 44, y: 52 }, { x: 72, y: 58 }, { x: 16, y: 76 }, { x: 44, y: 76 }, { x: 72, y: 84 }],
+    hides: [{ x: 92, y: 44, emoji: '🗑️', name: 'ゴミ箱の陰' }, { x: 6, y: 94, emoji: '🎈', name: 'キッズコーナーの陰' }],
+    decor: [],
+  },
+  yoshoku: {
+    name: '老舗の洋食屋', door: 46, counter: { x: 62, w: 34 }, windows: [6, 22], counterItems: '🍷🍖',
+    seats: [{ x: 18, y: 48 }, { x: 18, y: 72 }, { x: 18, y: 94 }, { x: 76, y: 56 }, { x: 76, y: 80 }],
+    hides: [{ x: 50, y: 70, emoji: '🎹', name: 'ピアノの陰' }, { x: 92, y: 94, emoji: '🧥', name: 'コート掛けの陰' }],
+    decor: [{ x: 50, y: 92, e: '🪴' }],
+  },
+  patisserie: {
+    name: 'パティスリー', door: 86, counter: { x: 22, w: 54 }, windows: [4], counterItems: '🍰🧁🍮🍪',
+    seats: [{ x: 18, y: 60 }, { x: 40, y: 86 }, { x: 74, y: 88 }],
+    hides: [{ x: 52, y: 64, emoji: '🎂', name: 'ウェディングケーキの陰' }, { x: 8, y: 42, emoji: '🪴', name: '観葉植物の陰' }, { x: 92, y: 62, emoji: '🎀', name: 'リボンの飾りの陰' }],
+    decor: [],
+  },
+  sushi: {
+    name: '寿司屋', door: 86, counter: { x: 4, w: 72 }, windows: [], counterItems: '🍣🐟🍵',
+    seats: [{ x: 12, y: 37, t: 'stool' }, { x: 26, y: 37, t: 'stool' }, { x: 40, y: 37, t: 'stool' }, { x: 54, y: 37, t: 'stool' }, { x: 68, y: 37, t: 'stool' },
+      { x: 28, y: 76 }, { x: 68, y: 80 }],
+    hides: [{ x: 93, y: 60, emoji: '🎋', name: '笹飾りの陰' }, { x: 7, y: 66, emoji: '🏮', name: '提灯の陰' }],
+    decor: [{ x: 48, y: 96, e: '🍶' }],
+  },
+  italian: {
+    name: 'トラットリア', door: 16, counter: { x: 54, w: 42 }, windows: [32], counterItems: '🍕🍝🍷',
+    seats: [{ x: 30, y: 54 }, { x: 68, y: 56 }, { x: 24, y: 82 }, { x: 58, y: 84 }],
+    hides: [{ x: 8, y: 62, emoji: '🛢️', name: 'ワイン樽の陰' }, { x: 92, y: 46, emoji: '🪴', name: '観葉植物の陰' }],
+    decor: [{ x: 86, y: 76, e: '🧀' }],
+  },
+  french: {
+    name: '高級フレンチ', door: 84, counter: { x: 4, w: 30 }, windows: [58], counterItems: '🍷🥂',
+    seats: [{ x: 26, y: 52 }, { x: 66, y: 54 }, { x: 26, y: 82 }, { x: 66, y: 86 }],
+    hides: [{ x: 46, y: 70, emoji: '🗿', name: '彫刻の陰' }, { x: 92, y: 92, emoji: '🪴', name: '観葉植物の陰' }, { x: 8, y: 40, emoji: '🎻', name: '楽団の陰' }],
+    decor: [{ x: 50, y: 40, e: '🕯️' }],
+  },
+};
+const LAYOUT_OF_GRADE = { 1: 'cafe', 2: 'bakery', 3: 'diner', 4: 'fastfood', 5: 'yoshoku', 6: 'patisserie', 7: 'sushi', 8: 'italian', 9: 'french', 10: 'french' };
+const LAYOUT_OF_BOSS = { noir: 'cafe', burger: 'fastfood', ginrei: 'sushi', etoile: 'patisserie', soleil: 'french' };
+const layoutOf = st => LAYOUTS[st.boss ? LAYOUT_OF_BOSS[st.boss] : LAYOUT_OF_GRADE[st.g]] || LAYOUTS.cafe;
+const layoutId = st => st.boss ? LAYOUT_OF_BOSS[st.boss] : LAYOUT_OF_GRADE[st.g];
+
+const lay = () => SPY.lay;
+const spyDoor = () => ({ x: lay().door, y: 31 });
+// 座る位置（テーブル席は左の椅子、カウンター席はその場）
+function spySeat(i) {
+  const t = lay().seats[i];
+  return t.t === 'stool' ? { x: t.x, y: t.y + 2 } : { x: t.x - 8, y: t.y + 3 };
+}
+// 店員の見回りルート：厨房の扉・カウンター前・各席のそば
+function spyRoute(L) {
+  return [
+    { x: L.door, y: 32 },
+    { x: L.counter.x + L.counter.w / 2, y: L.seats.some(t => t.t === 'stool') ? 46 : 34 },
+    ...L.seats.map(t => t.t === 'stool' ? { x: t.x, y: 46 } : { x: Math.min(94, t.x + 10), y: t.y + 2 }),
+  ];
+}
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 let SPY = null;  // 店内での位置など（保存しない）
 
 function spyInit(st) {
-  const free = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+  const L = layoutOf(st);
+  const route = spyRoute(L);
+  const free = L.seats.map((_, i) => i).sort(() => Math.random() - 0.5);
   SPY = {
-    storeId: st.id,
+    storeId: st.id, lay: L, route,
     p: { ...SPY_MAP.entrance, flip: true },
     target: null, pending: null, ctx: null, sitting: false, hidden: false,
     idle: 0, spotted: [], wasSpotted: false,
     npcs: Object.fromEntries(st.npcs.map((n, i) => {
-      const w = SPY_MAP.route[(i * 2) % SPY_MAP.route.length];
+      const w = route[(i * 2 + 1) % route.length];
       return [n.id, { x: w.x, y: w.y, tx: w.x, ty: w.y, wait: 1 + Math.random() * 2, dir: Math.PI / 2, scan: Math.random() * 6 }];
     })),
-    // 雰囲気づくりのお客さん（2卓に座っている）
-    patrons: free.slice(0, 2).map(i => ({ table: i, look: Chara.randomLook(Math.random() < 0.5 ? 'm' : 'f') })),
+    // 雰囲気づくりのお客さん（席の半分弱に座っている）
+    patrons: free.slice(0, Math.max(1, Math.floor(L.seats.length / 2) - 1)).map(i => ({ table: i, look: Chara.randomLook(Math.random() < 0.5 ? 'm' : 'f') })),
   };
 }
 
@@ -803,10 +884,10 @@ function spyGo(target, id) {
     SPY.target = spySeat(id);
     SPY.pending = { type: 'seat', i: id };
   } else if (target === 'door') {
-    SPY.target = { ...SPY_MAP.door };
+    SPY.target = spyDoor();
     SPY.pending = { type: 'door' };
   } else if (target === 'hide') {
-    const h = SPY_MAP.hides[id];
+    const h = lay().hides[id];
     if (!h) return;
     SPY.target = { x: h.x, y: h.y + 2 };
     SPY.pending = { type: 'hide', i: id };
@@ -875,7 +956,7 @@ function spyFrame(dt) {
         SPY.ctx = SPY.pending;
         SPY.sitting = SPY.pending.type === 'seat';
         SPY.hidden = SPY.pending.type === 'hide';
-        if (SPY.hidden) spySay(`🫥 ${SPY_MAP.hides[SPY.pending.i].name}に隠れた。ここなら見つからない…`, 'info');
+        if (SPY.hidden) spySay(`🫥 ${lay().hides[SPY.pending.i].name}に隠れた。ここなら見つからない…`, 'info');
         if (SPY.pending.type === 'npc') S.spy.focus = null;
         SPY.pending = null;
         keys.spyPanel = undefined;
@@ -892,7 +973,7 @@ function spyFrame(dt) {
     if (n.wait > 0) { n.wait -= dt; n.moving = false; continue; }
     if (Math.hypot(n.tx - n.x, n.ty - n.y) > 0.5) n.dir = Math.atan2(n.ty - n.y, n.tx - n.x);
     if (moveTo(n, { x: n.tx, y: n.ty }, SPY_MAP.npcSpeed * dt)) {
-      const w = rand(SPY_MAP.route);
+      const w = rand(SPY.route);
       n.tx = w.x; n.ty = w.y;
       n.wait = 1.5 + Math.random() * 3;
     }
@@ -910,7 +991,7 @@ function spyFrame(dt) {
 function spySight(st, dt) {
   const P = SPY.p;
   const watchers = watchersOfMe(st);
-  const atDoor = dist(P, SPY_MAP.door) < SPY_MAP.doorZone;
+  const atDoor = dist(P, spyDoor()) < SPY_MAP.doorZone;
   const still = !P.moving && !SPY.target && !SPY.sitting && !SPY.hidden && SPY.ctx?.type !== 'npc';
   SPY.idle = still ? SPY.idle + dt : 0;
   let reason = '';
@@ -1002,18 +1083,27 @@ function renderSpyMap(st) {
 
 function spyStaticHTML(st) {
   const type = storeType(st);
+  const L = layoutOf(st);
+  const signX = L.door > 50 ? 22 : 56;
   return `
-    <div class="spy-wall"><div class="window w1"></div><div class="spy-sign">${type.emoji} ${st.name}</div><div class="window w2"></div></div>
-    <div class="spy-counter">${st.recipes.slice(0, 2).map(r => `<span>${DISH[r].emoji}</span>`).join('')}</div>
-    <button class="spy-door" data-action="spyGo" data-target="door" aria-label="厨房の扉"><span>STAFF<br>ONLY</span></button>
+    <div class="spy-wall">
+      ${L.windows.map(x => `<div class="window" style="left:${x}%"></div>`).join('')}
+      <div class="spy-sign" style="left:${signX}%">${type.emoji} ${st.name}</div>
+    </div>
+    <div class="spy-counter" style="left:${L.counter.x}%;width:${L.counter.w}%">${(L.counterItems.match(/\p{Extended_Pictographic}/gu) || [])
+      .map(e => `<span>${e}</span>`).join('')}</div>
+    <button class="spy-door" style="left:${L.door - 8}%" data-action="spyGo" data-target="door" aria-label="厨房の扉"><span>STAFF<br>ONLY</span></button>
     <div class="spy-entrance">🚪</div>
     <svg class="spy-vision" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g id="spyCones"></g></svg>
-    ${SPY_MAP.hides.map((h, i) => `<button class="spy-hide" data-action="spyGo" data-target="hide" data-id="${i}" aria-label="${h.name}"
+    ${L.decor.map(d => `<div class="spy-decor ${d.big ? 'big' : ''}" style="left:${d.x}%;top:${d.y}%;z-index:${10 + d.y}">${d.e}</div>`).join('')}
+    ${L.hides.map((h, i) => `<button class="spy-hide" data-action="spyGo" data-target="hide" data-id="${i}" aria-label="${h.name}"
       style="left:${h.x}%;top:${h.y}%;z-index:${12 + h.y}">${h.emoji}</button>`).join('')}
-    ${SPY_MAP.tables.map((t, i) => `
-      <div class="chair" style="left:${spySeat(i).x}%;top:${spySeat(i).y}%;z-index:${9 + Math.round(spySeat(i).y)}">${CHAIR_SVG}</div>
-      <button class="table spy-table" data-action="spyGo" data-target="seat" data-id="${i}" aria-label="席${i + 1}"
-        style="left:${t.x}%;top:${t.y}%;z-index:${10 + t.y}"></button>`).join('')}`;
+    ${L.seats.map((t, i) => t.t === 'stool'
+      ? `<button class="spy-stool" data-action="spyGo" data-target="seat" data-id="${i}" aria-label="カウンター席${i + 1}"
+          style="left:${t.x}%;top:${t.y}%;z-index:${9 + t.y}"></button>`
+      : `<div class="chair" style="left:${t.x - 8}%;top:${t.y + 3}%;z-index:${9 + t.y + 3}">${CHAIR_SVG}</div>
+        <button class="table spy-table" data-action="spyGo" data-target="seat" data-id="${i}" aria-label="席${i + 1}"
+          style="left:${t.x}%;top:${t.y}%;z-index:${10 + t.y}"></button>`).join('')}`;
 }
 
 function spyPanelHTML(st) {
@@ -1022,7 +1112,7 @@ function spyPanelHTML(st) {
   let body = '<p class="note">💡 床をタップして歩く／🪑 席に座って注文／🚪 厨房の扉を調べる／🧑 店員に近づいて話す／🪴 物陰に隠れる。黄色い扇形は店員の視線です</p>';
   if (SPY.pending) body = '<p class="note">移動中…</p>';
   if (ctx?.type === 'hide') {
-    body = `<p class="note ok">🫥 ${SPY_MAP.hides[ctx.i].name}に隠れています。見つからず、警戒ゲージが少しずつ下がります。床をタップすると出ます。</p>`;
+    body = `<p class="note ok">🫥 ${lay().hides[ctx.i].name}に隠れています。見つからず、警戒ゲージが少しずつ下がります。床をタップすると出ます。</p>`;
   } else if (ctx?.type === 'seat') {
     body = `<div class="spy-actions one">
       <button class="act" data-action="spyEat" ${S.money >= eatCost(st) ? '' : 'disabled'}>
@@ -1042,7 +1132,7 @@ function spyPanelHTML(st) {
     : SPY.wasSpotted ? '<span class="spy-state bad">❗ 怪しまれている</span>'
     : SPY.sitting ? '<span class="spy-state ok">🪑 お客さんらしくしている</span>' : '';
   return `${status}<div class="spy-talk">
-      <div class="spy-bust">${Stand.svg(protagStandLook(), S.wardrobe.eq, 'bust')}</div>
+      <div class="spy-bust ${USE_STAND ? 'stand' : ''}">${protagFigure(S.wardrobe.eq, true)}</div>
       <div class="spy-msg ${S.spy.kind}">${S.spy.msg.replace(/\n/g, '<br>')}</div>
     </div>
     ${body}`;
@@ -1054,14 +1144,14 @@ function renderSpy() {
   if (!SPY || SPY.storeId !== st.id) spyInit(st);
   const rebuilt = setKeyed(view, 'spyStatic', 'spy' + st.id, `
     <div class="spy-top">
-      <div class="spy-title"><small>潜入中 🕵️ ${storeType(st).type}</small><b>${st.name}</b><span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span></div>
+      <div class="spy-title"><small>潜入中 🕵️ ${storeType(st).type}・${layoutOf(st).name}</small><b>${st.name}</b><span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span></div>
       <button class="btn ghost small" data-action="spyLeave">🚪 撤収</button>
     </div>
     <div class="alert-box">
       <div class="alert-label"><span>🚨 警戒ゲージ</span><b id="spyAlertNum"></b></div>
       <div class="bar alert"><i id="spyAlertBar"></i></div>
     </div>
-    <div class="spy-map-box"><div id="spyMap" class="spy-map style-${storeType(st).style}">${spyStaticHTML(st)}</div></div>
+    <div class="spy-map-box"><div id="spyMap" class="spy-map lay-${layoutId(st)}">${spyStaticHTML(st)}</div></div>
     <div class="spy-stats" id="spyStats"></div>
     <div id="spyPanel" class="spy-panel"></div>`);
   // 店内を作り直したときだけ、人物の表示を作り直す
@@ -1132,7 +1222,7 @@ function renderTown(el) {
     BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(',')].join('|');
   setKeyed(el, 'town', key, `
     <div class="protag-card">
-      <div class="protag-fig">${Stand.svg(protagStandLook(), S.wardrobe.eq, 'bust')}</div>
+      <div class="protag-fig ${USE_STAND ? 'stand' : ''}">${protagFigure(S.wardrobe.eq, USE_STAND)}</div>
       <div class="info">
         <div class="name">店長 <small>22歳</small></div>
         <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(null)}</b></div>
