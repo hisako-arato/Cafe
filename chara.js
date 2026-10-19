@@ -38,10 +38,25 @@ const Chara = (() => {
     };
   }
 
+  // 主人公（店長・22歳）：ピンクの長い髪にアホ毛と×の髪留め、灰青の瞳
   const OWNER_LOOK = {
-    g: 'm', skin: '#fdd8bf', hair: '#7a3e2a', style: 'swept', eye: '#f59e0b',
-    top: '#ffffff', bottom: '#2a2a3a', skirt: false, acc: 'chef', accColor: '#ef4444', mouth: 'open',
+    g: 'f', skin: '#ffe8dc', hair: '#f59ac0', hair2: '#fde4ef', style: 'long', eye: '#8ea6d4',
+    top: '#ffffff', bottom: '#2b2233', skirt: true, acc: 'none', accColor: '#ec4899', mouth: 'open',
+    ahoge: true, clip: true,
   };
+
+  // 主人公の服（着せ替え）。arm/top などの色と、追加の飾り（extra）で描き分ける
+  const BARE = 'skin';  // 素肌の色を使う印
+  const OUTFIT_BODIES = {
+    maid:    { arm: '#2b2233', hand: '#2b2233', top: '#ffffff', legs: '#2a2235', skirt: { c: '#2b2233', len: 'mid', frill: '#ffffff', peti: '#a8d8f0' } },
+    hoodie:  { arm: '#9aa7ba', top: '#9aa7ba', pants: '#3b5b8c' },
+    suit:    { arm: '#1e293b', top: '#1e293b', pants: '#1e293b' },
+    dress:   { arm: BARE, top: '#b91c1c', skirt: { c: '#b91c1c', len: 'long' } },
+    leather: { arm: '#1f1f1f', top: '#1f1f1f', pants: '#3a3a48' },
+    kimono:  { arm: '#db2777', top: '#db2777', skirt: { c: '#db2777', len: 'long' } },
+    lolita:  { arm: '#f9a8d4', top: '#f9a8d4', legs: '#ffffff', skirt: { c: '#f9a8d4', len: 'mid', frill: '#ffffff' } },
+  };
+  const HAND_ITEMS = { bouquet: '💐', bag: '👜', newspaper: '📰', guitar: '🎸', plush: '🧸' };
 
   // 後ろ髪
   function backHair(l) {
@@ -74,6 +89,11 @@ const Chara = (() => {
       if (l.style === 'twin') s += `<circle cx="24" cy="36" r="3.4" fill="${l.accColor}"/><circle cx="76" cy="36" r="3.4" fill="${l.accColor}"/>`;
       if (l.style === 'pony') s += `<path d="M68 18 L60 11 L60 25 Z M68 18 L76 11 L76 25 Z" fill="${l.accColor}"/>`;
     }
+    if (l.hair2) {
+      s += `<path d="M58 12 Q70 22 72 40 Q66 30 60 26 Z M38 12 Q30 20 30 34 Q34 26 40 22 Z" fill="${l.hair2}" stroke="none"/>`;
+    }
+    if (l.ahoge) s += `<path d="M49 10 Q44 -8 60 -6 Q50 -3 55 10 Z" fill="${h}"/>`;
+    if (l.clip) s += `<path d="M28 27 L35 34 M35 27 L28 34" fill="none" stroke="#ec4899" stroke-width="2.8"/>`;
     // ツヤ
     s += `<path d="M32 21 Q44 13 59 15" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3"/>`;
     return s;
@@ -126,6 +146,116 @@ const Chara = (() => {
     }
   }
 
+  function headItem(id, body) {
+    switch (id) {
+      case 'beret':
+        return `<ellipse cx="45" cy="12" rx="25" ry="9" fill="#7c3aed" transform="rotate(-12 45 12)"/><circle cx="44" cy="2.5" r="2.6" fill="#7c3aed"/>`;
+      case 'cap':
+        return `<path d="M21 24 Q23 1 50 1 Q77 1 79 24 Z" fill="#ef4444"/><path d="M52 21 Q76 16 94 25 Q78 30 54 27 Z" fill="#ef4444"/>`;
+      case 'fedora':
+        return `<path d="M32 21 Q31 3 50 3 Q69 3 68 21 Z" fill="#1f2937"/><rect x="32" y="15" width="36" height="5" fill="#b91c1c" stroke-width="1.4"/>
+          <path d="M18 22 Q50 13 82 22 Q84 27 78 27 L22 27 Q16 27 18 22 Z" fill="#1f2937"/>`;
+      case 'tiara':
+        return `<path d="M33 17 L37 6 L43 13 L50 1 L57 13 L63 6 L67 17 Z" fill="#fde047"/>
+          <g stroke="none"><circle cx="50" cy="9" r="2.4" fill="#ec4899"/><circle cx="38.5" cy="12" r="1.6" fill="#60a5fa"/><circle cx="61.5" cy="12" r="1.6" fill="#60a5fa"/></g>`;
+      case 'ribbon':
+        return `<path d="M50 9 L36 1 L36 17 Z M50 9 L64 1 L64 17 Z" fill="#ec4899"/><circle cx="50" cy="9" r="3.4" fill="#ec4899"/>`;
+      default:
+        // メイド服のときはヘッドドレス
+        return body === 'maid' ? `<path d="M26 22 Q50 6 74 22 Q50 14 26 22 Z" fill="#fff"/>
+          <path d="M27 20 q3 -6 7 -3 q3 -6 7 -3 q3 -6 7 -3 q3 -6 7 -3 q3 -6 7 -3 q3 -6 5 2" fill="#fff" stroke-width="1.6"/>
+          <path d="M66 17 L72 12 L73 20 Z" fill="#2b2233" stroke-width="1.4"/>` : '';
+    }
+  }
+
+  function faceItem(id) {
+    switch (id) {
+      case 'glasses':
+        return accessory({ acc: 'glasses' });
+      case 'sunglasses':
+        return `<g stroke-width="1.8"><rect x="30.5" y="40" width="17" height="11" rx="4" fill="#111827"/><rect x="52.5" y="40" width="17" height="11" rx="4" fill="#111827"/>
+          <path d="M47.5 44 L52.5 44" fill="none"/></g><g stroke="none" fill="#fff" opacity=".55"><rect x="33" y="42" width="5" height="2.4" rx="1"/><rect x="55" y="42" width="5" height="2.4" rx="1"/></g>`;
+      case 'mustache':
+        return `<path d="M41 56 Q45 51 50 54.5 Q55 51 59 56 Q55 58.5 50 56.5 Q45 58.5 41 56 Z" fill="#4a2f1f" stroke-width="1.4"/>`;
+      case 'monocle':
+        return `<circle cx="61" cy="46" r="8" fill="#fff" fill-opacity=".15" stroke="#c8963e" stroke-width="2"/>
+          <path d="M68 50 Q74 62 70 74" fill="none" stroke="#c8963e" stroke-width="1.2"/>`;
+      default: return '';
+    }
+  }
+
+  // 主人公の体（服ごとに描き分ける）
+  function outfitBody(l, id) {
+    const o = OUTFIT_BODIES[id] || OUTFIT_BODIES.maid;
+    const col = c => c === BARE ? l.skin : c;
+    const sk = o.skirt;
+    let s = '';
+    // 脚と靴
+    if (!sk || sk.len !== 'long') {
+      const legs = o.pants || o.legs || l.skin;
+      const w = o.pants ? 8 : 6, x1 = o.pants ? 41 : 42, x2 = o.pants ? 51 : 52;
+      s += `<rect x="${x1}" y="94" width="${w}" height="16" rx="3" fill="${legs}"/><rect x="${x2}" y="94" width="${w}" height="16" rx="3" fill="${legs}"/>`;
+    }
+    const shoe = id === 'maid' ? '#2b2233' : '#3b2a2a';
+    s += `<path d="M37.5 112 Q37.5 106.5 44.5 106.5 Q49.5 106.5 49.5 112 Z" fill="${shoe}"/>`;
+    s += `<path d="M50.5 112 Q50.5 106.5 55.5 106.5 Q62.5 106.5 62.5 112 Z" fill="${shoe}"/>`;
+    if (id === 'maid') s += `<path d="M38 112 L49 112 M51 112 L62 112" fill="none" stroke="#ec4899" stroke-width="1.8"/>`;
+    // 腕
+    for (const d of ['M37 70 Q26 76 26 88', 'M63 70 Q74 76 74 88']) {
+      s += `<path d="${d}" fill="none" stroke-width="10"/><path d="${d}" fill="none" stroke="${col(o.arm)}" stroke-width="5.6"/>`;
+    }
+    s += `<circle cx="26" cy="89.5" r="4.4" fill="${col(o.hand || BARE)}"/><circle cx="74" cy="89.5" r="4.4" fill="${col(o.hand || BARE)}"/>`;
+    // 胴体
+    s += `<path d="M34 99 Q31 76 38 66 Q50 62 62 66 Q69 76 66 99 Z" fill="${col(o.top)}"/>`;
+    if (o.pants) s += `<path d="M34.6 91 L65.4 91 L66 99 L34 99 Z" fill="${o.pants}"/>`;
+    // スカート
+    if (sk) {
+      if (sk.len === 'long') {
+        s += `<path d="M35 86 L65 86 L72 111 Q50 115 28 111 Z" fill="${sk.c}"/>`;
+      } else {
+        if (sk.peti) s += `<path d="M25 103 Q50 112 75 103 L76 106 Q50 115 24 106 Z" fill="${sk.peti}"/>`;
+        s += `<path d="M34 86 L66 86 L76 103 Q50 110 24 103 Z" fill="${sk.c}"/>`;
+        if (sk.frill) s += `<path d="M24 103 q3.25 5 6.5 0 q3.25 5 6.5 0 q3.25 5 6.5 0 q3.25 5 6.5 0 q3.25 5 6.5 0 q3.25 5 6.5 0 q3.25 5 6.5 0 q3.25 5 6.5 0" fill="${sk.frill}" stroke-width="1.6"/>`;
+      }
+    }
+    // 飾り
+    switch (id) {
+      case 'maid':
+        s += `<circle cx="37" cy="70" r="4.6" fill="#fff"/><circle cx="63" cy="70" r="4.6" fill="#fff"/>`;
+        s += `<path d="M36.5 77 L63.5 77 L64.5 90 L35.5 90 Z" fill="#2b2233"/>`;
+        s += `<path d="M45 79 L55 88 M55 79 L45 88" fill="none" stroke="#ec4899" stroke-width="1.8"/>`;
+        s += `<path d="M46.5 67.5 L53.5 74 M53.5 67.5 L46.5 74" fill="none" stroke="#ec4899" stroke-width="2"/>`;
+        s += `<path d="M42 65 q2 3 4 0 q2 3 4 0 q2 3 4 0 q2 3 4 0" fill="#fff" stroke-width="1.4"/>`;
+        break;
+      case 'hoodie':
+        s += `<path d="M35 67 Q50 76 65 67 Q63 62 50 62 Q37 62 35 67 Z" fill="#7d8aa0"/>`;
+        s += `<path d="M47 70 L46 80 M53 70 L54 80" fill="none" stroke-width="1.4"/><rect x="41" y="82" width="18" height="7" rx="3" fill="#8794a8" stroke-width="1.4"/>`;
+        break;
+      case 'suit':
+        s += `<path d="M44 66 L50 79 L56 66 Z" fill="#fff" stroke-width="1.6"/>`;
+        s += `<path d="M42 66 L48 82 M58 66 L52 82" fill="none" stroke="#475569" stroke-width="2"/><g stroke="none" fill="#cbd5e1"><circle cx="50" cy="86" r="1.4"/><circle cx="50" cy="92" r="1.4"/></g>`;
+        break;
+      case 'dress':
+        s += `<path d="M38 66 Q50 72 62 66" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0.1 3.2"/>`;
+        s += `<path d="M36 86 Q50 90 64 86" fill="none" stroke="#7f1d1d" stroke-width="1.6"/>`;
+        break;
+      case 'leather':
+        s += `<path d="M45 66 L50 76 L55 66 Z" fill="#dc2626" stroke-width="1.6"/><path d="M50 76 L50 99" fill="none" stroke="#9ca3af" stroke-width="1.6"/>`;
+        s += `<g stroke="none" fill="#d1d5db"><circle cx="40" cy="72" r="1.2"/><circle cx="60" cy="72" r="1.2"/><circle cx="39" cy="78" r="1.2"/><circle cx="61" cy="78" r="1.2"/></g>`;
+        break;
+      case 'kimono':
+        s += `<path d="M43 65 L56 82 M57 65 L49 75" fill="none" stroke="#fff" stroke-width="2.6"/>`;
+        s += `<rect x="35" y="80" width="30" height="8" fill="#facc15" stroke-width="1.6"/><path d="M48 80 L52 88" fill="none" stroke="#b45309" stroke-width="1.4"/>`;
+        s += `<g stroke="none" fill="#fbcfe8"><circle cx="42" cy="96" r="2"/><circle cx="58" cy="102" r="2"/><circle cx="46" cy="106" r="1.6"/></g>`;
+        break;
+      case 'lolita':
+        s += `<path d="M42 65 q2 3 4 0 q2 3 4 0 q2 3 4 0 q2 3 4 0" fill="#fff" stroke-width="1.4"/>`;
+        s += `<path d="M50 72 L42 67 L42 77 Z M50 72 L58 67 L58 77 Z" fill="#ec4899" stroke-width="1.6"/><circle cx="50" cy="72" r="2.2" fill="#ec4899"/>`;
+        break;
+    }
+    return s;
+  }
+
   // 体（役職で服が変わる）
   function body(l, role) {
     const isCustomer = role === 'customer';
@@ -170,11 +300,13 @@ const Chara = (() => {
     return s;
   }
 
-  function inner(l, role) {
+  // role が 'owner'（店内のメイド服）か 'protag'（着せ替え中）なら主人公として描く
+  function inner(l, role, outfit) {
+    const o = role === 'owner' ? { body: 'maid' } : role === 'protag' ? (outfit || { body: 'maid' }) : null;
     return `<ellipse cx="50" cy="114" rx="20" ry="4" fill="#000" fill-opacity=".22" stroke="none"/>
       <g stroke="${OUT}" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round">
         ${backHair(l)}
-        ${body(l, role)}
+        ${o ? outfitBody(l, o.body) : body(l, role)}
         <ellipse cx="50" cy="40" rx="30" ry="28" fill="${l.skin}"/>
         ${eye(39, l.eye, l.g === 'f', true)}
         ${eye(61, l.eye, l.g === 'f', false)}
@@ -182,18 +314,19 @@ const Chara = (() => {
         <ellipse cx="63.5" cy="55" rx="4.6" ry="2.3" fill="#fb7185" opacity=".45"/></g>
         ${mouth(l)}
         ${frontHair(l)}
-        ${accessory(l)}
+        ${o ? faceItem(o.face) + headItem(o.head, o.body) : accessory(l)}
+        ${o && HAND_ITEMS[o.item] ? `<text x="68" y="99" font-size="15" stroke="none">${HAND_ITEMS[o.item]}</text>` : ''}
       </g>`;
   }
 
   // 全身
-  function svg(l, role) {
-    return `<svg viewBox="0 -12 100 128" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner(l, role)}</svg>`;
+  function svg(l, role, outfit) {
+    return `<svg viewBox="0 -12 100 128" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner(l, role, outfit)}</svg>`;
   }
 
   // 顔アップ（アイコン用）
-  function portrait(l, role) {
-    return `<svg viewBox="12 -6 76 76" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner(l, role)}</svg>`;
+  function portrait(l, role, outfit) {
+    return `<svg viewBox="12 -6 76 76" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner(l, role, outfit)}</svg>`;
   }
 
   return { randomLook, svg, portrait, OWNER_LOOK };

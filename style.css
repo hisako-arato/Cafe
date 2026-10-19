@@ -171,7 +171,7 @@ button {
 /* 下部ナビ */
 #bottomNav {
   flex: none;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: #fff;
   border-top: 3px solid #2a0a6e;
   padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
@@ -683,3 +683,102 @@ button {
   border-radius: 8px; padding: 3px 0; font-size: .74rem; font-weight: 800;
 }
 .post-btn.on { background: #ede9fe; border-color: #8b5cf6; color: #5b21b6; }
+
+/* ===== 街・引き抜き作戦 ===== */
+.protag-card {
+  display: flex; gap: 12px; align-items: center;
+  padding: 10px; border-radius: 16px;
+  background: linear-gradient(135deg, #fdf2f8, #ede9fe);
+  border: 2px solid #f9a8d4;
+}
+.protag-fig { width: 92px; flex: none; }
+.protag-fig svg, .closet-fig svg, .spy-fig svg { width: 100%; height: auto; }
+.protag-card .name small { font-size: .75rem; color: var(--muted); }
+.protag-card .btn { margin-top: 6px; }
+.closet-stats { font-size: .88rem; margin: 2px 0; }
+.closet-stats.center { text-align: center; margin: 8px 0 0; }
+.town-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
+.store-list { display: grid; gap: 8px; }
+.store-card { border: 2px solid var(--line); border-radius: 16px; padding: 10px; background: #fff; }
+.store-card.gB, .store-card.gA { border-color: #c4b5fd; }
+.store-card.gS { border-color: #fbbf24; background: linear-gradient(160deg, #fffbeb, #fff); }
+.store-top { display: flex; gap: 8px; align-items: center; }
+.store-emoji { font-size: 1.9rem; }
+.grade {
+  flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  font-weight: 900; color: #fff; background: #94a3b8; border: 2px solid #fff; box-shadow: 0 0 0 2px #2b1d33;
+}
+.grade.gD { background: #22c55e; } .grade.gC { background: #3b82f6; } .grade.gB { background: #a855f7; }
+.grade.gA { background: #f97316; } .grade.gS { background: linear-gradient(135deg, #f43f5e, #f59e0b, #22c55e, #3b82f6); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 6px; }
+.chips .chip { font-size: .72rem; padding: 1px 8px; }
+.chip.diff.easy { background: #dcfce7; border-color: #86efac; color: #166534; }
+.chip.diff.even { background: #fef9c3; border-color: #fde047; color: #854d0e; }
+.chip.diff.hard { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.chip.bad { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.npc-faces { display: flex; gap: 8px; margin: 4px 0 8px; }
+.face-mini { position: relative; padding-bottom: 6px; }
+.face-mini .card { width: 40px; height: 40px; border-radius: 10px; border-width: 2px; }
+.face-mini i { position: absolute; left: 0; bottom: 0; height: 4px; border-radius: 2px; background: #ec4899; }
+.battle-line { font-size: .8rem; font-weight: 800; color: #c2410c; margin-bottom: 6px; }
+.store-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.badge.ace { background: linear-gradient(90deg, #f59e0b, #ec4899); }
+
+.power-line { display: flex; justify-content: space-around; gap: 6px; background: var(--panel-2); border-radius: 12px; padding: 8px; font-size: .85rem; }
+.power-line b { font-size: 1.1rem; }
+.power-line .good { color: #16a34a; } .power-line .bad { color: #dc2626; }
+.pick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+.pick { display: flex; gap: 8px; align-items: center; text-align: left; border: 2px solid var(--line); background: #fff; border-radius: 12px; padding: 6px; font-weight: 800; font-size: .82rem; }
+.pick .card { width: 40px; height: 40px; border-radius: 10px; border-width: 2px; }
+.pick small { display: block; font-size: .7rem; }
+.pick.on { border-color: #f97316; background: #fff7ed; }
+
+/* 潜入 */
+.spy-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.spy-head small { display: block; color: #be185d; font-weight: 900; font-size: .75rem; }
+.spy-head b { font-size: 1.05rem; margin-right: 6px; }
+.spy-head .grade { display: inline-grid; width: 24px; height: 24px; font-size: .8rem; vertical-align: 2px; }
+.alert-box { margin: 10px 0; }
+.alert-label { display: flex; justify-content: space-between; font-weight: 900; font-size: .85rem; }
+.bar.alert { height: 12px; border-radius: 6px; }
+.bar.alert i { background: linear-gradient(90deg, #fbbf24, #ef4444); }
+.bar.aff { height: 6px; margin-top: 4px; }
+.bar.aff i { background: linear-gradient(90deg, #f9a8d4, #ec4899); }
+.spy-scene {
+  display: flex; gap: 10px; align-items: flex-end;
+  background: linear-gradient(#fef3c7, #fde68a 70%, #d6b77a 70%);
+  border: 2px solid #2b1d33; border-radius: 16px; padding: 8px 10px 4px;
+}
+.spy-fig { width: 96px; flex: none; }
+.spy-msg {
+  flex: 1; align-self: center; background: #fff; border: 2px solid #2b1d33; border-radius: 14px;
+  padding: 8px 10px; font-size: .86rem; line-height: 1.55; position: relative;
+}
+.spy-msg.good { border-color: #16a34a; } .spy-msg.bad { border-color: #dc2626; }
+.spy-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.act {
+  border: 2px solid var(--line); background: #fff; border-radius: 14px; padding: 10px 8px;
+  display: flex; flex-direction: column; gap: 2px; text-align: left; box-shadow: 0 3px 0 var(--line);
+}
+.act small { font-size: .72rem; color: var(--muted); }
+.act.risky { border-color: #fecaca; }
+.act:disabled { opacity: .5; }
+.btn.pink { background: linear-gradient(#f9a8d4, #ec4899); box-shadow: 0 3px 0 #9d174d; text-shadow: 0 1px 0 #9d174d; }
+.note.warn { color: var(--warn); }
+
+/* 身支度 */
+.closet-top { display: flex; gap: 12px; align-items: center; }
+.closet-fig { width: 110px; flex: none; background: radial-gradient(circle at 50% 60%, #fce7f3, transparent 70%); }
+.outfit-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.outfit {
+  border: 2px solid var(--line); background: #fff; border-radius: 12px; padding: 6px 8px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; font-size: .8rem;
+}
+.outfit small { font-size: .68rem; color: var(--muted); }
+.outfit span { font-size: .72rem; }
+.outfit em { font-style: normal; font-size: .72rem; font-weight: 900; color: #c2410c; }
+.outfit.on { border-color: #ec4899; background: #fdf2f8; }
+.outfit.on em { color: #be185d; }
+.outfit.shop { border-style: dashed; }
+.outfit.match small::after { content: " ✓ドレスコード"; color: #16a34a; font-weight: 800; }
+.outfit:disabled { opacity: .45; }

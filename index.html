@@ -63,6 +63,11 @@
         </div>
       </section>
 
+      <!-- 街画面（引き抜き作戦） -->
+      <section id="scr-town" class="screen">
+        <div class="scroll" id="town"></div>
+      </section>
+
       <!-- 設定画面 -->
       <section id="scr-settings" class="screen">
         <div class="scroll" id="settings"></div>
@@ -72,6 +77,7 @@
     <nav id="bottomNav">
       <button class="nav-btn active" data-action="screen" data-screen="cafe"><i>☕</i><span>カフェ</span></button>
       <button class="nav-btn" data-action="screen" data-screen="kitchen"><i>🍳</i><span>厨房</span><b class="dot" id="kitchenDot" hidden></b></button>
+      <button class="nav-btn" data-action="screen" data-screen="town"><i>🗺️</i><span>街</span></button>
       <button class="nav-btn" data-action="screen" data-screen="settings"><i>⚙️</i><span>設定</span></button>
     </nav>
   </div>
@@ -83,5 +89,6 @@
 
   <script src="chara.js"></script>
   <script src="game.js"></script>
+  <script src="town.js"></script>
 </body>
 </html>

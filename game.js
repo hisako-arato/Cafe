@@ -36,8 +36,19 @@ const DISHES = [
   { id: 'pasta',   name: 'ナポリタン',     emoji: '🍝', time: 90,  cost: 80,  servings: 7, price: 45, xp: 10, level: 4 },
   { id: 'cake',    name: 'ショートケーキ', emoji: '🍰', time: 150, cost: 130, servings: 8, price: 66, xp: 15, level: 5 },
   { id: 'steak',   name: 'ステーキ',       emoji: '🥩', time: 180, cost: 200, servings: 8, price: 90, xp: 22, level: 7 },
+  // ここから下は引き抜き作戦（街のお店）で閃くレシピ
+  { id: 'croissant', name: 'クロワッサン',     emoji: '🥐', time: 20,  cost: 18,  servings: 7,  price: 26,  xp: 3,  secret: true },
+  { id: 'teishoku',  name: '生姜焼き定食',     emoji: '🍱', time: 45,  cost: 40,  servings: 7,  price: 44,  xp: 6,  secret: true },
+  { id: 'burger',    name: 'ハンバーガー',     emoji: '🍔', time: 25,  cost: 35,  servings: 12, price: 30,  xp: 5,  secret: true },
+  { id: 'hamburg',   name: 'デミグラスハンバーグ', emoji: '🍖', time: 80, cost: 75, servings: 8, price: 70,  xp: 11, secret: true },
+  { id: 'parfait',   name: '季節のパフェ',     emoji: '🍨', time: 70,  cost: 70,  servings: 9,  price: 68,  xp: 12, secret: true },
+  { id: 'sushi',     name: '特上にぎり',       emoji: '🍣', time: 120, cost: 160, servings: 8,  price: 125, xp: 20, secret: true },
+  { id: 'pizza',     name: 'マルゲリータ',     emoji: '🍕', time: 100, cost: 120, servings: 12, price: 90,  xp: 18, secret: true },
+  { id: 'bouilla',   name: 'ブイヤベース',     emoji: '🥘', time: 160, cost: 260, servings: 8,  price: 170, xp: 28, secret: true },
+  { id: 'course',    name: '三ツ星のフルコース', emoji: '🦞', time: 240, cost: 420, servings: 8, price: 300, xp: 45, secret: true },
 ];
 const DISH = Object.fromEntries(DISHES.map(d => [d.id, d]));
+const canCook = d => d.secret ? S.recipes.includes(d.id) : S.level >= d.level;
 
 const DECOR = [
   { id: 'plant',      name: '観葉植物',           emoji: '🪴', price: 80,   pop: 1 },
@@ -86,6 +97,11 @@ function newGame() {
     stats: { served: 0, hired: 0, promoted: 0 },
     seenHelp: false,
     savedAt: Date.now(),
+    recipes: [],
+    wardrobe: { owned: ['maid'], eq: { body: 'maid', head: null, face: null, item: null } },
+    town: null,
+    battles: [],
+    spy: null,
   };
 }
 
@@ -130,8 +146,12 @@ function migrate(s) {
   });
   for (const m of s.staff) {
     if (!m.post) m.post = 'any';
+    // 主人公（店長）はいつも最新の見た目で
+    if (m.owner) { m.look = Chara.OWNER_LOOK; m.g = 'f'; continue; }
+    // 勝負に出ていない人が出かけたままになっていたら戻す
+    if (m.away && !(s.battles || []).some(b => b.members.includes(m.id))) m.away = null;
     if (m.look) continue;
-    if (m.owner) { m.look = Chara.OWNER_LOOK; m.g = 'm'; continue; }
+    if (m.owner) continue;
     const p = randomPerson();
     Object.assign(m, { name: p.name, g: p.g, nation: p.nation, look: p.look });
   }
@@ -142,8 +162,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner, post })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -153,7 +173,16 @@ function save() {
 function applyOffline() {
   const now = Date.now();
   const since = S.savedAt || now;
-  const rep = { away: Math.max(0, now - since), done: [], cooking: [], idle: [], quit: [], parts: [] };
+  const rep = { away: Math.max(0, now - since), done: [], cooking: [], idle: [], quit: [], parts: [], town: [] };
+  if (S.spy) {
+    const st = S.town && S.town.stores.find(x => x.id === S.spy.storeId);
+    if (st) st.alertAt = since;
+    rep.town.push({ text: `🕵️ 店長は「${st ? st.name : '潜入先'}」から無事に帰ってきました`, kind: '' });
+    S.spy = null;
+  }
+  const o = S.staff.find(x => x.owner);
+  if (o) o.away = null;
+  resolveBattles(rep.town);
   S.stoves.forEach((st, i) => {
     if (!st.dish || st.progress >= st.duration) return;
     const cook = st.cook != null && S.staff.find(s => s.id === st.cook);
@@ -287,13 +316,12 @@ function fmtTime(sec) {
   const m = Math.floor(sec / 60), s = sec % 60;
   return s ? `${m}分${s}秒` : `${m}分`;
 }
+// 野良のお客さんは★1〜2が中心（まれに★3）。強い人材は引き抜き作戦で
 function rollStars() {
   const r = Math.random();
-  if (r < 0.45) return 1;
-  if (r < 0.78) return 2;
-  if (r < 0.93) return 3;
-  if (r < 0.985) return 4;
-  return 5;
+  if (r < 0.62) return 1;
+  if (r < 0.95) return 2;
+  return 3;
 }
 function randomPerson() {
   const nation = rand(Object.keys(NATIONS));
@@ -605,7 +633,13 @@ function update(dt) {
   }
   customers = customers.filter(c => !c.gone);
 
+  townTick();
+
   S.staff.forEach((s, i) => {
+    if (s.away) {
+      if (s.walkOut && moveTo(s, L.door, speedOf(s) * dt)) s.walkOut = false;
+      return;
+    }
     if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) {
       const h = homeOf(s, i);
       s.x = h.x; s.y = h.y;
@@ -699,9 +733,12 @@ function placePerson(el, p, role) {
   el.style.zIndex = 10 + Math.round(p.y);
   el.classList.toggle('flip', !!p.flip);
   el.classList.toggle('walk', !!p.moving);
-  if (el._role !== role) {
-    el._role = role;
-    el.querySelector('.sprite').innerHTML = Chara.svg(p.look, role);
+  // 潜入に出かける店長は身支度した服で歩く
+  const outfit = role === 'protag' ? S.wardrobe.eq : null;
+  const roleKey = role + (outfit ? JSON.stringify(outfit) : '');
+  if (el._role !== roleKey) {
+    el._role = roleKey;
+    el.querySelector('.sprite').innerHTML = Chara.svg(p.look, role, outfit);
   }
 }
 
@@ -754,13 +791,14 @@ function renderFloor() {
   }
 
   for (const s of S.staff) {
+    if (s.away && !s.walkOut) continue;
     const el = floorEl('s' + s.id, 'person staff', PERSON_HTML);
-    const role = roleOf(s);
+    const role = s.away === 'spy' ? 'protag' : roleOf(s);
     placePerson(el, s, role);
-    if (el._tag !== role) {
-      el._tag = role;
+    if (el._tag !== roleOf(s)) {
+      el._tag = roleOf(s);
       const tag = el.querySelector('.tag');
-      tag.className = 'tag ' + role;
+      tag.className = 'tag ' + roleOf(s);
       tag.textContent = s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'バイト';
     }
     const k = s.task;
@@ -814,7 +852,7 @@ function renderFloor() {
   ].join(''));
 
   // メニュー黒板
-  const menu = DISHES.filter(d => d.level <= S.level).slice(-4);
+  const menu = DISHES.filter(canCook).sort((a, b) => a.price - b.price).slice(-4);
   setKeyed($('board'), 'board', menu.map(d => d.id).join(','),
     '<b>MENU</b>' + menu.map(d => `<span>${d.emoji} ${d.name}<em>${yen(d.price)}</em></span>`).join(''));
 }
@@ -888,6 +926,8 @@ function renderCook(el) {
 }
 
 function staffStatus(s) {
+  if (s.away === 'spy') return '潜入中';
+  if (s.away) return '料理勝負に出撃中';
   const k = s.task;
   if (!k) return '待機中';
   if (k.type === 'serve') return k.phase === 'counter' ? '料理を取りに行っています' : '配膳中';
@@ -896,7 +936,7 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type + s.post).join(','), S.contracts, staffCap()].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '')).join(','), S.contracts, staffCap()].join('|');
   setKeyed(el, 'staff', key, `
     <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 永久雇用契約 × ${S.contracts}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
@@ -908,6 +948,7 @@ function renderStaff(el) {
         <div class="info">
           <div class="name">${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}
             <span class="badge ${roleOf(s)}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
+          ${s.title ? `<div class="sub">🏷️ 元「${s.from}」の${s.title}</div>` : ''}
           <div class="sub">速さ <span class="stars">${starStr(s.stars)}</span>　<span data-status="${s.id}"></span></div>
           ${s.type === 'part' ? `<div class="bar contract"><i data-contract="${s.id}"></i></div>
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
@@ -1023,6 +1064,7 @@ function renderUI() {
   renderHud();
   if (currentScreen === 'kitchen') ({ cook: renderCook, staff: renderStaff, shop: renderShop })[kitchenTab]($('kitchen'));
   if (currentScreen === 'settings') renderSettings();
+  if (currentScreen === 'town') { renderTown($('town')); updateTimers($('town')); }
 }
 
 function setKitchenTab(tab) {
@@ -1059,6 +1101,7 @@ function openWelcome(rep) {
     ...rep.idle.map(d => `<li class="bad">${DISH[d.dish].emoji} コンロ${d.i + 1}：${DISH[d.dish].name}は担当者がいなかったので進んでいません</li>`),
     ...rep.quit.map(n => `<li class="bad">⌛ アルバイトの${n}が契約満了で辞めてしまいました</li>`),
     ...rep.parts.map(p => `<li>⏳ アルバイトの${p.name}：契約のこり ${fmtTime(p.left)}</li>`),
+    ...rep.town.map(t => `<li class="${t.kind}">${t.text}</li>`),
   ];
   openModal(`<div class="welcome">
       <h2>☕ おかえりなさい！</h2>
@@ -1076,17 +1119,19 @@ function openDishPicker(i) {
   openModal(`
     <h2>🔥 コンロ${i + 1}：何を作りますか？</h2>
     <p class="note">材料費を払うと、手の空いたスタッフが調理を始めます。</p>
-    <div class="dish-list">${DISHES.map(d => {
-      const locked = S.level < d.level;
+    <div class="dish-list">${DISHES.filter(d => !d.secret || canCook(d)).map(d => {
+      const locked = !canCook(d);
       return `<div class="row ${locked ? 'locked' : ''}">
         <div class="ico">${d.emoji}</div>
-        <div class="info"><div class="name">${d.name}</div>
+        <div class="info"><div class="name">${d.name}${d.secret ? ' <span class="badge ace">引き抜き</span>' : ''}</div>
           <div class="sub">${locked ? `レベル${d.level}で解禁` :
             `⏱ ${fmtTime(d.time)}　🍽 ${servingsOf(d)}人前　1人前 ${yen(d.price)}`}</div></div>
         <button class="btn" data-action="cook" data-i="${i}" data-dish="${d.id}"
           ${locked || S.money < d.cost ? 'disabled' : ''}>${locked ? '🔒' : yen(d.cost)}</button>
       </div>`;
-    }).join('')}</div>
+    }).join('')}
+    ${DISHES.some(d => d.secret && !canCook(d)) ? `<div class="row locked"><div class="ico">❓</div><div class="info"><div class="name">？？？</div>
+      <div class="sub">あと ${DISHES.filter(d => d.secret && !canCook(d)).length} 種類のレシピが、🗺️ 街のお店に眠っています</div></div></div>` : ''}</div>
     <div class="actions"><button class="btn ghost" data-action="close">閉じる</button></div>`);
 }
 
@@ -1127,6 +1172,8 @@ function openHelp() {
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
       <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
+      <li><b>🗺️ 街</b>では<b>引き抜き作戦</b>ができます。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
+      <li>「👗 身支度」で着替えると<b>魅力</b>（口説く成功率）と<b>馴染み</b>（警戒されにくさ）が変わります。お店のドレスコードに合う服だと馴染みやすくなります。</li>
       <li>条件を満たしたら「ショップ」で<b>🏪 店舗ランク</b>を上げましょう。屋台から始まり、ランクが上がるほどコンロ・テーブル・スタッフ・設備強化の上限が増えます。データは自動で保存されます。</li>
     </ul>
     <div class="actions"><button class="btn" data-action="close">はじめる</button></div>`);
@@ -1206,6 +1253,7 @@ document.addEventListener('click', e => {
     case 'reset': resetGame(); break;
     case 'help': openHelp(); break;
     case 'close': closeModal(); break;
+    default: townAction(d);
   }
   renderUI();
 });
@@ -1240,10 +1288,13 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 
 new ResizeObserver(() => computeLayout()).observe(floor);
 
-const offlineReport = applyOffline();
-initRuntime();
-addLog('☕ 開店しました。いらっしゃいませ！');
-renderUI();
-requestAnimationFrame(frame);
-if (!S.seenHelp) openHelp();
-else if (offlineReport.away >= 60 * 1000 || offlineReport.done.length || offlineReport.quit.length) openWelcome(offlineReport);
+// town.js を読み込んだあとに呼ぶ
+function boot() {
+  const offlineReport = applyOffline();
+  initRuntime();
+  addLog('☕ 開店しました。いらっしゃいませ！');
+  renderUI();
+  requestAnimationFrame(frame);
+  if (!S.seenHelp) openHelp();
+  else if (offlineReport.away >= 60 * 1000 || offlineReport.done.length || offlineReport.quit.length || offlineReport.town.length) openWelcome(offlineReport);
+}
