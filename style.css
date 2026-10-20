@@ -1086,3 +1086,24 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
   background: #6366f1; border-radius: 99px; padding: .1cqw .9cqw;
   animation: pulse 1.4s infinite;
 }
+
+/* 従業員の反応（ふきだし） */
+.person .say:empty { display: none; }
+.person .say {
+  position: absolute; left: 50%; bottom: 112%; transform: translateX(-50%);
+  width: max-content; max-width: 42cqw;
+  background: #fff; color: #3b0d1e; border: 2px solid #be123c; border-radius: 2cqw;
+  padding: .6cqw 1.4cqw; font-size: 2.5cqw; font-weight: 800; line-height: 1.35; text-align: center;
+  box-shadow: 0 .6cqw 0 rgba(0,0,0,.2);
+  animation: toastIn .2s ease-out;
+}
+.person .say::after {
+  content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  border: 1.2cqw solid transparent; border-top-color: #be123c;
+}
+.person.saying { z-index: 400 !important; }
+.say-line { margin-top: 4px; font-size: .75rem; font-weight: 700; color: #be123c; }
+.person.say-l .say { left: 0; transform: none; }
+.person.say-l .say::after { left: 3cqw; }
+.person.say-r .say { left: auto; right: 0; transform: none; }
+.person.say-r .say::after { left: auto; right: 3cqw; transform: none; }

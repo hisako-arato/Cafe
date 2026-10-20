@@ -193,8 +193,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss, hp, rest }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -216,6 +216,10 @@ function applyOffline(resume = false) {
   }
   const o = S.staff.find(x => x.owner);
   if (o && !resume) o.away = null;
+  for (const b of S.battles) {
+    const sec = Math.max(0, (Math.min(now, b.until) - since) / 1000);
+    for (const id of b.members) { const m = S.staff.find(x => x.id === id); if (m) tickStamina(m, sec); }
+  }
   resolveBattles(rep.town);
   if (total < 1) return rep;
 
@@ -363,7 +367,10 @@ function backToWork(s, msg) {
 }
 // 体力の増減（店長は減らない）
 function tickStamina(s, dt) {
-  if (s.owner || s.away) return;
+  if (s.owner) return;
+  // 料理勝負に出ている間も、働いているときと同じように減る（尽きたら帰ってから休む）
+  if (s.away === 'battle') { s.hp = Math.max(0, hpOf(s) - dt); return; }
+  if (s.away) return;
   if (!Number.isFinite(s.hp)) s.hp = maxHp(s);
   if (s.rest) {
     s.hp = Math.min(maxHp(s), s.hp + REST_RATE * dt);
@@ -784,6 +791,7 @@ function update(dt) {
 
   S.staff.forEach((s, i) => {
     if (s.away) {
+      tickStamina(s, dt);
       if (s.walkOut && walkTo(s, L.door, speedOf(s) * dt)) s.walkOut = false;
       return;
     }
@@ -884,7 +892,7 @@ const CHAIR_SVG = `<svg viewBox="0 0 40 52" aria-hidden="true"><g stroke="#2b1d3
   <rect x="7" y="2" width="26" height="26" rx="9" fill="#7c4a2d"/><rect x="11" y="6" width="18" height="18" rx="6" fill="#c0703c"/>
   <rect x="4" y="28" width="32" height="10" rx="4" fill="#c0703c"/></g></svg>`;
 
-const PERSON_HTML = '<div class="bubble"></div><div class="sprite"></div><div class="carry"></div><div class="tag"></div>';
+const PERSON_HTML = '<div class="bubble"></div><div class="say"></div><div class="sprite"></div><div class="carry"></div><div class="tag"></div>';
 
 function placePerson(el, p, role) {
   place(el, p.x, p.y);
@@ -966,6 +974,12 @@ function renderFloor() {
     else if (k?.type === 'cook' && k.phase === 'work') carry = '🍳';
     if (el._carry !== carry) { el._carry = carry; el.querySelector('.carry').textContent = carry; }
     el.classList.toggle('working', !!k && k.phase === 'work');
+    const say = s.say && s.say.until > Date.now() ? s.say.text : '';
+    if (el._say !== say) { el._say = say; el.querySelector('.say').textContent = say; }
+    el.classList.toggle('saying', !!say);
+    // 画面の端ではふきだしを内側に寄せる
+    el.classList.toggle('say-l', s.x < 25);
+    el.classList.toggle('say-r', s.x > 75);
     const b = s.rest ? '😪' : '';
     if (el._sweat !== b) { el._sweat = b; el.querySelector('.bubble').innerHTML = b ? `<span>${b}</span>` : ''; }
   }
@@ -1295,8 +1309,10 @@ function useDrink(id) {
   S.drinks--;
   // ドリンクは体力を回復するだけ。休憩中の人は満タンになったら職場に戻る
   s.hp = Math.min(maxHp(s), hpOf(s) + DRINK_SEC);
+  const wasRest = s.rest;
   if (s.rest && s.hp >= maxHp(s)) backToWork(s, `☕ ${displayName(s)}が体力満タンで職場に戻りました`);
   toast(`🥤 ${displayName(s)}がエナジードリンクを飲みました（体力 ${days(s.hp)}/${s.stars}日）`);
+  react(s, !wasRest ? 'drinkWork' : s.rest ? 'drinkRest' : 'drinkFull');
   afterRestChange();
 }
 function openRestRoom() {
@@ -1311,7 +1327,7 @@ function openRestRoom() {
       <div class="row">
         ${card(s, roleOf(s), s.stars)}
         <div class="info"><div class="name">${displayName(s)} <span class="badge ${roleOf(s)}">${s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
-          ${hpBar(s)}</div>
+          ${hpBar(s)}${s.say && s.say.until > Date.now() ? `<div class="say-line">💬 「${s.say.text}」</div>` : ''}</div>
         <div class="staff-actions">
           <button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>
           ${drinkButton(s)}
@@ -1321,13 +1337,50 @@ function openRestRoom() {
 }
 let restRoomKey = '';
 const restKey = () => S.staff.filter(s => s.rest && !s.away).map(s => s.id).join(',') + '|' + S.drinks;
+// ===== 従業員の反応（激励・ドリンク）=====
+// 回数を重ねるほど、店のブラックぶりを責める言葉がきつくなる
+const REACTIONS = {
+  cheer: [
+    'え、休憩まだ始まったばかりなんですけど…', '「がんばって」で体力が戻ると思ってます？', '激励って言えば何でも許されると思ってません？',
+    'さっき倒れたの、見てましたよね？', '休憩室って、店長が叩き起こしに来る部屋でしたっけ',
+  ],
+  cheerPhone: [
+    '潜入先から電話で激励…どこにいても逃げられないんですね', '店長、いま敵の店にいますよね？ なんで電話してくるんですか', 'スパイ中まで部下の休憩を監視してるんですか…',
+  ],
+  drinkRest: [
+    '寝てる人の口にエナドリを流し込むの、やめてください', '休ませる気、ありませんよね？', '体力は戻っても、心は戻らないんですよ…',
+    'これ、点滴の代わりですか？', '目は覚めましたけど、気持ちは冷めました',
+  ],
+  drinkFull: [
+    '満タンにした瞬間に出勤…労基に通報しますよ', '休憩を「飲み物」で終わらせる会社、初めて見ました', 'はいはい、エナドリ注入完了。出勤しますよ…',
+  ],
+  drinkWork: [
+    'まだ働かせる気ですね…', '差し入れのつもりですか？ 燃料補給ですよね、これ', '退勤って言葉、この店の辞書にあります？',
+    'エナドリより先に、お給料を上げてください', 'これ飲んだら、あと何日働けばいいんですか…',
+  ],
+  angry: [
+    'この店、36協定って出してます？', '求人票に「アットホームな職場」って書いてありましたよね', '永久雇用契約って、永久に休めない契約のことだったんですね',
+    '店長の血の色、何色ですか？', '辞めたいって言ったら、また契約書出てくるんですよね…', 'ブラック企業大賞、狙ってます？',
+  ],
+};
+const SAY_MS = 5000;
+function react(s, kind) {
+  s.abuse = (s.abuse || 0) + 1;
+  const pool = s.abuse >= 4 ? [...REACTIONS[kind], ...REACTIONS.angry, ...REACTIONS.angry] : REACTIONS[kind];
+  const line = rand(pool);
+  s.say = { text: line, until: Date.now() + SAY_MS };
+  toast(`💬 ${displayName(s)}：「${line}」`);
+}
+
 const CHEER_LINES = ['「もうひと踏ん張り、お願い！」', '「あなたがいないと始まらないの！」', '「終わったらみんなでケーキ食べよう！」'];
 function cheer(id) {
   const s = S.staff.find(x => x.id === id);
   if (!s || !s.rest) return;
   s.hp = Math.min(maxHp(s), s.hp + CHEER_SEC);
   backToWork(s);
-  toast(`💪 店長：${rand(CHEER_LINES)} ${displayName(s)}が元気に職場へ戻りました`);
+  const phone = !!S.staff.find(x => x.owner)?.away;
+  toast(`💪 店長${phone ? '（潜入先から電話で）' : ''}：${rand(CHEER_LINES)} ${displayName(s)}が職場へ戻りました`);
+  react(s, phone ? 'cheerPhone' : 'cheer');
   afterRestChange();
 }
 function afterRestChange() {
