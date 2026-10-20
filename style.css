@@ -1059,3 +1059,30 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .badge.mero.lv3 { background: linear-gradient(90deg, #ec4899, #be123c); animation: pulse 1.2s infinite; }
 .mero-note { margin: 4px 10px 0; padding: 4px 8px; border-radius: 8px; background: #fdf2f8; color: #9d174d; font-size: .72rem; font-weight: 700; line-height: 1.45; }
 .chip.mero { background: #fce7f3; color: #be185d; border-color: #f9a8d4; }
+
+/* 体力 */
+.bar.hp { height: 6px; margin-top: 4px; }
+.bar.hp i { background: linear-gradient(90deg, #4ade80, #16a34a); }
+.bar.hp.low i { background: linear-gradient(90deg, #fca5a5, #ef4444); }
+
+/* 休憩室の扉（奥の壁） */
+.rest-door {
+  position: absolute; left: 17.5%; top: 4.5cqw; width: 10cqw; height: 12.5cqw;
+  background:
+    radial-gradient(circle at 80% 55%, #fcd34d 0 .7cqw, transparent .8cqw),
+    linear-gradient(#c79a6b, #a8743f);
+  border: 2px solid #2b1d33; border-bottom: 0;
+  border-radius: 1.2cqw 1.2cqw 0 0;
+  z-index: 2;
+  padding: 0; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: .6cqw; padding-top: 1.2cqw;
+}
+.rest-door b {
+  font-size: 1.6cqw; font-weight: 900; color: #3b2414;
+  background: #fff7e6; border: 1px solid #2b1d33; border-radius: .6cqw; padding: .1cqw .7cqw; white-space: nowrap;
+}
+.rest-door .zz {
+  font-size: 2.2cqw; font-weight: 900; color: #fff;
+  background: #6366f1; border-radius: 99px; padding: .1cqw .9cqw;
+  animation: pulse 1.4s infinite;
+}

@@ -9,6 +9,15 @@ const CUST_SPEED = 22;      // お客さんの歩く速さ（%/秒）
 const CHEAPEST_RATE = 0.8;  // お客さんが一番安い料理を頼む確率
 const MAX_STOVES = 8;        // 全ランクを通しての上限
 const MAX_TABLES = 12;
+// 体力：★1つにつき「1勤」（実働15分）。店長は無限
+const SHIFT_SEC = 900;
+const IDLE_DRAIN = 0.5;      // 待機中は半分の速さで減る
+const REST_RATE = 10;        // 休憩中は減る速さの10倍で回復
+const OFFLINE_MAX_SEC = 8 * 3600;  // 留守中の営業は最大8時間分
+const DRINKS = {
+  drink:   { emoji: '🥤', name: 'エナジードリンク',   desc: '体力を1勤分（15分働ける分）回復', base: 100, step: 50 },
+  special: { emoji: '🧃', name: '特製スタミナドリンク', desc: '体力を全回復',                     base: 400, step: 200 },
+};
 
 // 店舗ランク：上げるとコンロ・テーブル・スタッフ・設備強化の上限が増える
 const RANKS = [
@@ -125,6 +134,7 @@ function newGame() {
     town: null,
     battles: [],
     spy: null,
+    items: { drink: 0, special: 0 },
   };
 }
 
@@ -168,8 +178,10 @@ function migrate(s) {
     const duration = DISH[st.dish].time * 1000;
     return { dish: st.dish, progress: Math.min(duration, now - st.start), duration, cook: null };
   });
+  s.items = Object.assign({ drink: 0, special: 0 }, s.items);
   for (const m of s.staff) {
     if (!m.post) m.post = 'any';
+    if (!m.owner && !Number.isFinite(m.hp)) { m.hp = m.stars * SHIFT_SEC; m.rest = false; }
     // 主人公（店長）はいつも最新の見た目で
     if (m.owner) { m.look = protagLook(s.wardrobe); m.g = 'f'; continue; }
     // 勝負に出ていない人が出かけたままになっていたら戻す
@@ -186,50 +198,116 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss, hp, rest }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
 
 // 閉じていた間の進み具合を反映し、「おかえりなさい」用の報告を返す
-// （調理担当がいたコンロだけ調理が進む。お客さんはお店を開いている間だけ来る）
-function applyOffline() {
+// 留守中も、カウンターの料理と調理中の料理がある間は営業する（最大8時間分）。
+// 営業しているあいだスタッフの体力は減り、店を閉めている時間は休憩として回復する
+function applyOffline(resume = false) {
   const now = Date.now();
-  const since = S.savedAt || now;
-  const rep = { away: Math.max(0, now - since), done: [], cooking: [], idle: [], quit: [], parts: [], town: [] };
-  if (S.spy) {
+  const since = Math.min(now, S.savedAt || now);
+  const total = (now - since) / 1000;
+  const rep = { away: now - since, done: [], idle: [], quit: [], parts: [], town: [], tired: [],
+    served: 0, sales: 0, soldOut: false, capped: total > OFFLINE_MAX_SEC };
+  if (S.spy && !resume) {
     const st = S.town && S.town.stores.find(x => x.id === S.spy.storeId);
     if (st) st.alertAt = since;
     rep.town.push({ text: `🕵️ 店長は「${st ? st.name : '潜入先'}」から無事に帰ってきました`, kind: '' });
     S.spy = null;
   }
   const o = S.staff.find(x => x.owner);
-  if (o) o.away = null;
+  if (o && !resume) o.away = null;
   resolveBattles(rep.town);
-  S.stoves.forEach((st, i) => {
-    if (!st.dish || st.progress >= st.duration) return;
-    const cook = st.cook != null && S.staff.find(s => s.id === st.cook);
-    if (!cook) { st.cook = null; rep.idle.push({ i, dish: st.dish }); return; }
-    const until = cook.type === 'part' ? Math.min(now, cook.expireAt) : now;
-    const from = st.progress;
-    st.progress = Math.min(st.duration, st.progress + Math.max(0, until - since) * cookRate(cook));
-    if (st.progress >= st.duration) {
-      st.cook = null;
-      rep.done.push({ i, dish: st.dish, cook: displayName(cook) });
-    } else {
-      rep.cooking.push({ i, dish: st.dish, cook: displayName(cook), from: from / st.duration, to: st.progress / st.duration });
-    }
-  });
-  for (const s of [...S.staff]) {
-    if (s.type !== 'part') continue;
-    if (s.expireAt <= now) {
+  if (total < 1) return rep;
+
+  // 8時間を超えた分は、閉店して休んでいた時間
+  const extra = Math.max(0, total - OFFLINE_MAX_SEC);
+  for (const s of S.staff) {
+    if (!extra || s.owner || s.away) continue;
+    s.hp = Math.min(maxHp(s), hpOf(s) + REST_RATE * extra);
+    if (s.rest && s.hp >= maxHp(s) / 2) s.rest = false;
+  }
+
+  const start = since + extra * 1000;
+  const level0 = S.level;
+  const progressed = new Set();
+  const custPerMin = Math.min(60 / spawnInterval(), S.tableCount * 60 / (EAT_SEC + 20));
+  let acc = 0, xp = 0;
+  for (let t = 0; t < total - extra; t += 60) {
+    const dt = Math.min(60, total - extra - t);
+    const at = start + (t + dt) * 1000;
+    // アルバイトの契約満了
+    for (const s of [...S.staff]) {
+      if (s.type !== 'part' || s.expireAt > at) continue;
       rep.quit.push(displayName(s));
       S.stoves.forEach(st => { if (st.cook === s.id) st.cook = null; });
       S.staff.splice(S.staff.indexOf(s), 1);
-    } else {
-      rep.parts.push({ name: displayName(s), left: (s.expireAt - now) / 1000 });
     }
+    const open = S.counter.length > 0 || S.stoves.some(st => st.dish && st.progress < st.duration);
+    const busy = new Set();
+    // 調理：担当がいなければ、手の空いた人（持ち場がホール以外）が代わりに入る
+    S.stoves.forEach((st, i) => {
+      if (!st.dish || st.progress >= st.duration) return;
+      let cook = S.staff.find(s => s.id === st.cook);
+      if (!cook || !onDuty(cook) || busy.has(cook)) {
+        cook = S.staff.find(s => onDuty(s) && s.post !== 'hall' && !busy.has(s));
+        st.cook = cook ? cook.id : null;
+      }
+      if (!cook) return;
+      busy.add(cook);
+      progressed.add(i);
+      st.progress = Math.min(st.duration, st.progress + dt * 1000 * cookRate(cook));
+      if (st.progress >= st.duration) {
+        const d = DISH[st.dish], n = servingsOf(d);
+        addToCounter(d.id, n);
+        xp += d.xp;
+        rep.done.push({ i, dish: d.id, cook: displayName(cook), n });
+        Object.assign(st, newStove());
+      }
+    });
+    // 接客：カウンターに料理がある間、お客さんが来て食べていく
+    const hall = S.staff.filter(s => onDuty(s) && s.post !== 'kitchen' && !busy.has(s));
+    let served = 0;
+    if (hall.length && S.counter.length) {
+      acc += Math.min(custPerMin, hall.length * 4) * dt / 60;
+      while (acc >= 1 && S.counter.length) {
+        const dish = takeServing();
+        const pay = payFor(dish);
+        S.money += pay;
+        S.stats.served++;
+        rep.served++;
+        rep.sales += pay;
+        xp++;
+        served++;
+        acc--;
+      }
+      if (!S.counter.length) { acc = 0; rep.soldOut = true; }
+    }
+    // 体力：営業中は減り、閉店中は休んで回復する
+    for (const s of S.staff) {
+      if (s.owner || s.away) continue;
+      if (!open && !s.rest) { s.hp = Math.min(maxHp(s), hpOf(s) + REST_RATE * dt); continue; }
+      const r = tickStamina(s, dt, busy.has(s) || (served > 0 && hall.includes(s)));
+      if (r === 'out') {
+        S.stoves.forEach(st => { if (st.cook === s.id) st.cook = null; });
+        s.hp = 0; s.rest = true;
+      } else if (r === 'back') {
+        s.rest = false;
+      }
+    }
+  }
+  quietToasts = true;
+  if (xp) addXp(xp);
+  quietToasts = false;
+  if (S.level > level0) rep.level = [level0, S.level];
+  S.stoves.forEach((st, i) => { if (st.dish && st.progress < st.duration && !progressed.has(i)) rep.idle.push({ i, dish: st.dish }); });
+  for (const s of S.staff) {
+    if (s.rest && !s.away) rep.tired.push({ name: displayName(s), left: restLeft(s) });
+    if (s.type === 'part') rep.parts.push({ name: displayName(s), left: (s.expireAt - now) / 1000 });
   }
   return rep;
 }
@@ -241,10 +319,12 @@ function initRuntime() {
   S.staff.forEach((s, i) => {
     const h = homeOf(s, i);
     s.x = h.x; s.y = h.y; s.task = null;
+    // 休憩中の人は休憩室の中にいる
+    s.inRoom = !!s.rest;
   });
   S.stoves.forEach((st, i) => {
     const cook = st.cook != null && S.staff.find(s => s.id === st.cook);
-    if (!cook || cook.task) { st.cook = null; return; }
+    if (!cook || cook.task || !onDuty(cook)) { st.cook = null; return; }
     const p = stovePos(i);
     cook.x = p.x; cook.y = p.y;
     cook.task = { type: 'cook', stove: i, phase: 'work' };
@@ -273,6 +353,40 @@ const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const contractPrice = () => Math.round(800 * Math.pow(1.5, S.contractsBought));
 const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.01) * (1 + S.up.table * 0.1));
+// ===== 体力 =====
+const maxHp = s => s.stars * SHIFT_SEC;
+const hpOf = s => s.owner ? Infinity : Number.isFinite(s.hp) ? s.hp : maxHp(s);
+const onDuty = s => !s.away && !s.rest;
+const drinkPrice = k => DRINKS[k].base + DRINKS[k].step * S.rank;
+const shifts = sec => (sec / SHIFT_SEC).toFixed(1);
+// 休憩から復帰する（体力が半分以上）までの秒数
+const restLeft = s => Math.max(0, (maxHp(s) / 2 - hpOf(s)) / REST_RATE);
+
+function exhaust(s) {
+  cancelTaskOf(s);
+  s.hp = 0;
+  s.rest = true;
+  s.inRoom = false;
+}
+function backToWork(s, msg) {
+  s.rest = false;
+  if (s.inRoom) { s.x = L.rest.x; s.y = L.rest.y; }
+  s.inRoom = false;
+  if (msg) addLog(msg);
+}
+// 体力の増減（店長は減らない）
+function tickStamina(s, dt, working) {
+  if (s.owner || s.away) return;
+  if (!Number.isFinite(s.hp)) s.hp = maxHp(s);
+  if (s.rest) {
+    s.hp = Math.min(maxHp(s), s.hp + REST_RATE * dt);
+    if (s.hp >= maxHp(s) / 2) return 'back';
+  } else {
+    s.hp -= (working ? 1 : IDLE_DRAIN) * dt;
+    if (s.hp <= 0) return 'out';
+  }
+}
+
 const roleOf = s => s.owner ? 'owner' : s.type;
 const displayName = p => p.owner ? p.name : p.name + 'さん';
 
@@ -300,6 +414,7 @@ function computeLayout() {
   L.gateK = { x: 87, y: u(36) };
   L.gateH = { x: 87, y: u(46) };
   L.door = { x: 95, y: 99 };
+  L.rest = { x: 22.5, y: u(20) };   // 休憩室の扉の前
   el.style.setProperty('--counter-z', 10 + Math.round(u(41)));
   L.ver++;
 }
@@ -516,6 +631,12 @@ function buy(kind, id) {
     S.money -= p;
     S.decor[d.id] = (S.decor[d.id] || 0) + 1;
     toast(`${d.emoji} ${d.name}を飾りました（人気度 +${d.pop}）`);
+  } else if (kind === 'drink') {
+    const dr = DRINKS[id];
+    if (!dr || S.money < drinkPrice(id)) return;
+    S.money -= drinkPrice(id);
+    S.items[id]++;
+    toast(`${dr.emoji} ${dr.name}を買いました（所持 ${S.items[id]}）`);
   } else if (kind === 'contract') {
     const p = contractPrice();
     if (S.money < p) return;
@@ -684,6 +805,17 @@ function update(dt) {
       const h = homeOf(s, i);
       s.x = h.x; s.y = h.y;
     }
+    const tick = tickStamina(s, dt, !!s.task);
+    if (tick === 'out') {
+      exhaust(s);
+      toast(`😪 ${displayName(s)}の体力が尽きました。休憩室で休みます`);
+    } else if (tick === 'back') {
+      backToWork(s, `☕ ${displayName(s)}が休憩から戻りました`);
+    }
+    if (s.rest) {
+      if (!s.inRoom && walkTo(s, L.rest, speedOf(s) * dt)) s.inRoom = true;
+      return;
+    }
     if (!s.task) findTask(s);
     const step = speedOf(s) * dt;
     const k = s.task;
@@ -831,7 +963,7 @@ function renderFloor() {
   }
 
   for (const s of S.staff) {
-    if (s.away && !s.walkOut) continue;
+    if ((s.away && !s.walkOut) || s.inRoom) continue;
     const el = floorEl('s' + s.id, 'person staff', PERSON_HTML);
     const role = s.away === 'spy' ? 'protag' : roleOf(s);
     placePerson(el, s, role);
@@ -848,11 +980,17 @@ function renderFloor() {
     else if (k?.type === 'cook' && k.phase === 'work') carry = '🍳';
     if (el._carry !== carry) { el._carry = carry; el.querySelector('.carry').textContent = carry; }
     el.classList.toggle('working', !!k && k.phase === 'work');
+    const b = s.rest ? '😪' : !s.owner && hpOf(s) < maxHp(s) * 0.2 ? '💦' : '';
+    if (el._sweat !== b) { el._sweat = b; el.querySelector('.bubble').innerHTML = b ? `<span>${b}</span>` : ''; }
   }
 
   for (const [key, el] of floorEls) {
     if (!el._seen) { el.remove(); floorEls.delete(key); }
   }
+
+  // 休憩室の扉（休んでいる人数）
+  const resting = S.staff.filter(s => s.rest && !s.away).length;
+  setKeyed($('restDoor'), 'restDoor', resting, `<b>休憩室</b>${resting ? `<span class="zz">💤${resting}</span>` : ''}`);
 
   // スタッフ出入口（通っている人がいれば開く）
   $('staffGate').classList.toggle('open', S.staff.some(s => !s.away && Math.abs(s.x - L.gateK.x) < 6 && s.y > L.gateK.y - u(3) && s.y < L.gateH.y + u(2)));
@@ -971,6 +1109,7 @@ function renderCook(el) {
 function staffStatus(s) {
   if (s.away === 'spy') return '潜入中';
   if (s.away) return '料理勝負に出撃中';
+  if (s.rest) return s.inRoom ? '💤 休憩室で休憩中' : '😪 休憩室へ向かっています';
   const k = s.task;
   if (!k) return '待機中';
   if (k.type === 'serve') return k.phase === 'counter' ? '料理を取りに行っています' : '配膳中';
@@ -979,12 +1118,13 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '')).join(','), S.contracts, staffCap()].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), S.contracts, staffCap(), S.items.drink, S.items.special].join('|');
   setKeyed(el, 'staff', key, `
     <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 永久雇用契約 × ${S.contracts}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約はレベルアップかショップで手に入ります。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
+    <p class="note"><b>体力</b>：★1つにつき1勤（15分働ける分）。尽きると💤休憩室で休み、半分戻ると職場に戻ります。🥤 × ${S.items.drink}　🧃 × ${S.items.special}</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
         ${card(s, roleOf(s), s.stars)}
@@ -993,6 +1133,7 @@ function renderStaff(el) {
             <span class="badge ${roleOf(s)}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
           ${s.title ? `<div class="sub">${s.boss ? '👑' : '🏷️'} 元「${s.from}」の${s.title}</div>` : ''}
           <div class="sub">速さ <span class="stars">${starStr(s.stars)}</span>　<span data-status="${s.id}"></span></div>
+          ${hpBar(s)}
           ${s.type === 'part' ? `<div class="bar contract"><i data-contract="${s.id}"></i></div>
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
           <div class="posts">${Object.entries(POSTS).map(([p, label]) =>
@@ -1002,9 +1143,12 @@ function renderStaff(el) {
           ${s.type === 'part'
             ? `<button class="btn blue small" data-action="promote" data-id="${s.id}" ${S.contracts > 0 ? '' : 'disabled'}>📜 正社員にする</button>`
             : ''}
+          ${s.rest && !s.away ? `<button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>` : ''}
+          ${drinkButtons(s)}
           ${s.owner ? '' : `<button class="btn ghost small" data-action="askFire" data-id="${s.id}">解雇</button>`}
         </div>
       </div>`).join('')}</div>`);
+  updateHpBars(el);
   const now = Date.now();
   for (const s of S.staff) {
     const st = el.querySelector(`[data-status="${s.id}"]`);
@@ -1036,7 +1180,8 @@ function renderShop(el) {
     needs.map(r => r.ok + r.now).join(','), next && S.money >= next.cost,
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
     ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
-    S.money >= sp, S.money >= tp, S.money >= cp].join('|');
+    S.money >= sp, S.money >= tp, S.money >= cp,
+    ...Object.keys(DRINKS).map(k => S.items[k] + ':' + (S.money >= drinkPrice(k)))].join('|');
   const r = rankOf();
   setKeyed(el, 'shop', key, `
     <h3>🏪 店舗ランク</h3>
@@ -1072,6 +1217,11 @@ function renderShop(el) {
       ${DECOR.map(d => itemRow(d.emoji, d.name, `人気度 +${d.pop}　所持 ${S.decor[d.id] || 0}`,
         decorPrice(d), 'buy', `data-kind="decor" data-id="${d.id}"`, S.money < decorPrice(d))).join('')}
     </div>
+    <h3>体力回復（スタッフタブ・休憩室で飲ませる）</h3>
+    <div class="item-list">
+      ${Object.entries(DRINKS).map(([k, dr]) => itemRow(dr.emoji, dr.name, `${dr.desc}　所持 ${S.items[k]}`, drinkPrice(k), 'buy',
+        `data-kind="drink" data-id="${k}"`, S.money < drinkPrice(k))).join('')}
+    </div>
     <h3>契約</h3>
     <div class="item-list">
       ${itemRow('📜', '永久雇用契約', 'アルバイトを正社員にできる契約書。買うたびに値上がりします', cp, 'buy',
@@ -1105,6 +1255,11 @@ function renderSettings() {
 
 function renderUI() {
   renderHud();
+  if (modalKind() === 'rest') {
+    const top = $('sheet').scrollTop;
+    if (restKey() !== restRoomKey) { openRestRoom(); $('sheet').scrollTop = top; }
+    updateHpBars($('sheet'));
+  }
   if (currentScreen === 'kitchen') ({ cook: renderCook, staff: renderStaff, shop: renderShop })[kitchenTab]($('kitchen'));
   if (currentScreen === 'settings') renderSettings();
   if (currentScreen === 'town') { renderTown($('town')); updateTimers($('town')); }
@@ -1126,22 +1281,100 @@ function setScreen(name) {
 }
 
 // ===== モーダル =====
-function openModal(html) {
+function openModal(html, kind = '') {
   $('sheet').innerHTML = html;
   $('modal').hidden = false;
+  $('modal').dataset.kind = kind;
 }
+const modalKind = () => $('modal').hidden ? null : $('modal').dataset.kind;
 function closeModal() {
   $('modal').hidden = true;
+  $('toasts').classList.remove('top');
   $('sheet').innerHTML = '';
+}
+
+// ===== 休憩室 =====
+function hpBar(s) {
+  if (s.owner) return '<div class="sub">体力 ∞</div>';
+  const r = hpOf(s) / maxHp(s);
+  return `<div class="bar hp ${r < 0.2 ? 'low' : ''}" data-hp="${s.id}"><i style="width:${(r * 100).toFixed(1)}%"></i></div>
+    <div class="sub">体力 ${shifts(hpOf(s))}/${s.stars}勤${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}</div>`;
+}
+function drinkButtons(s) {
+  if (s.owner || s.away || hpOf(s) >= maxHp(s)) return '';
+  return Object.entries(DRINKS).filter(([k]) => S.items[k] > 0).map(([k, dr]) =>
+    `<button class="btn ghost small" data-action="drink" data-kind="${k}" data-id="${s.id}">${dr.emoji} 飲ませる</button>`).join('');
+}
+function openRestRoom() {
+  const list = S.staff.filter(s => s.rest && !s.away);
+  const ownerOut = !!S.staff.find(s => s.owner)?.away;
+  restRoomKey = restKey();
+  openModal(`<div class="sheet-head"><h2>💤 休憩室</h2>
+      <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
+    <p class="note">体力が尽きたスタッフはここで休み、体力が半分まで戻ると自動で職場に戻ります。
+      タップして<b>💪 激励</b>すると体力が1勤分（15分働ける分）回復して、すぐに働きに戻ります。</p>
+    <p class="note">🥤 エナジードリンク × ${S.items.drink}　🧃 特製スタミナドリンク × ${S.items.special}（ショップで買えます）</p>
+    ${ownerOut ? '<p class="warn">店長が外出中なので激励できません</p>' : ''}
+    <div class="staff-list">${list.length ? list.map(s => `
+      <div class="row">
+        ${card(s, roleOf(s), s.stars)}
+        <div class="info"><div class="name">${displayName(s)} <span class="badge ${roleOf(s)}">${s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
+          ${hpBar(s)}</div>
+        <div class="staff-actions">
+          <button class="btn pink small" data-action="cheer" data-id="${s.id}" ${ownerOut ? 'disabled' : ''}>💪 激励</button>
+          ${drinkButtons(s)}
+        </div>
+      </div>`).join('') : '<p class="note">いま休んでいるスタッフはいません</p>'}</div>
+    <div class="actions"><button class="btn ghost" data-action="close">閉じる</button></div>`, 'rest');
+}
+let restRoomKey = '';
+const restKey = () => S.staff.filter(s => s.rest && !s.away).map(s => s.id).join(',') + '|' + S.items.drink + S.items.special + !!S.staff.find(s => s.owner)?.away;
+const CHEER_LINES = ['「もうひと踏ん張り、お願い！」', '「あなたがいないと始まらないの！」', '「終わったらみんなでケーキ食べよう！」'];
+function cheer(id) {
+  const s = S.staff.find(x => x.id === id);
+  if (!s || !s.rest || S.staff.find(x => x.owner)?.away) return;
+  s.hp = Math.min(maxHp(s), s.hp + SHIFT_SEC);
+  backToWork(s);
+  toast(`💪 店長：${rand(CHEER_LINES)} ${displayName(s)}が元気に職場へ戻りました`);
+  afterRestChange();
+}
+function useDrink(id, kind) {
+  const s = S.staff.find(x => x.id === id);
+  if (!s || s.owner || !DRINKS[kind] || S.items[kind] <= 0 || hpOf(s) >= maxHp(s)) return;
+  S.items[kind]--;
+  s.hp = kind === 'special' ? maxHp(s) : Math.min(maxHp(s), hpOf(s) + SHIFT_SEC);
+  if (s.rest && s.hp >= maxHp(s) / 2) backToWork(s);
+  toast(`${DRINKS[kind].emoji} ${displayName(s)}が${DRINKS[kind].name}を飲みました（体力 ${shifts(s.hp)}/${s.stars}勤）`);
+  afterRestChange();
+}
+function afterRestChange() {
+  if (modalKind() === 'rest') openRestRoom();
+  keys.staff = undefined;
+  save();
+}
+// 体力バーの数字だけを書き換える（ボタンは作り直さない）
+function updateHpBars(root) {
+  for (const el of root.querySelectorAll('[data-hp]')) {
+    const s = S.staff.find(x => x.id === +el.dataset.hp);
+    if (!s || s.owner) continue;
+    const r = hpOf(s) / maxHp(s);
+    el.querySelector('i').style.width = (r * 100).toFixed(1) + '%';
+    el.classList.toggle('low', r < 0.2);
+    el.nextElementSibling.textContent = `体力 ${shifts(hpOf(s))}/${s.stars}勤${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}`;
+  }
 }
 
 // 閉じていた間の報告
 function openWelcome(rep) {
-  const pct = r => Math.floor(r * 100) + '%';
   const items = [
-    ...rep.done.map(d => `<li class="good">${DISH[d.dish].emoji} コンロ${d.i + 1}：${d.cook}が<b>${DISH[d.dish].name}</b>を作り終えました！ 厨房でカウンターに並べましょう</li>`),
-    ...rep.cooking.map(d => `<li>${DISH[d.dish].emoji} コンロ${d.i + 1}：${d.cook}が${DISH[d.dish].name}を調理中（${pct(d.from)} → <b>${pct(d.to)}</b>）</li>`),
-    ...rep.idle.map(d => `<li class="bad">${DISH[d.dish].emoji} コンロ${d.i + 1}：${DISH[d.dish].name}は担当者がいなかったので進んでいません</li>`),
+    ...(rep.served ? [`<li class="good">🍽️ 留守中も営業して <b>${rep.served.toLocaleString('ja-JP')}人</b>を接客し、<b>${yen(rep.sales)}</b> の売上がありました</li>`] : []),
+    ...(rep.level ? [`<li class="good">🎉 レベル${rep.level[0]} → <b>レベル${rep.level[1]}</b>になりました！ 永久雇用契約 📜 +${rep.level[1] - rep.level[0]}</li>`] : []),
+    ...(rep.soldOut ? ['<li class="bad">🈳 カウンターの料理が売り切れて、途中で閉店しました。出かける前に多めに作っておきましょう</li>'] : []),
+    ...rep.done.map(d => `<li class="good">${DISH[d.dish].emoji} コンロ${d.i + 1}：${d.cook}が<b>${DISH[d.dish].name}</b>を作り、${d.n}人前をカウンターに並べました</li>`),
+    ...S.stoves.map((st, i) => st.dish && st.progress < st.duration && !rep.idle.some(d => d.i === i)
+      ? `<li>${DISH[st.dish].emoji} コンロ${i + 1}：${DISH[st.dish].name}を調理中（<b>${Math.floor(st.progress / st.duration * 100)}%</b>）</li>` : '').filter(Boolean),
+    ...rep.idle.map(d => `<li class="bad">${DISH[d.dish].emoji} コンロ${d.i + 1}：${DISH[d.dish].name}は作れる人がいなかったので進んでいません</li>`),
+    ...rep.tired.map(t => `<li class="bad">😪 ${t.name}は疲れて休憩室で休んでいます（復帰まで ${fmtTime(t.left)}）</li>`),
     ...rep.quit.map(n => `<li class="bad">⌛ アルバイトの${n}が契約満了で辞めてしまいました</li>`),
     ...rep.parts.map(p => `<li>⏳ アルバイトの${p.name}：契約のこり ${fmtTime(p.left)}</li>`),
     ...rep.town.map(t => `<li class="${t.kind}">${t.text}</li>`),
@@ -1153,7 +1386,7 @@ function openWelcome(rep) {
     </div>
     <h3>留守中のできごと</h3>
     <ul class="report">${items.length ? items.join('') : '<li>特に変わったことはありませんでした</li>'}</ul>
-    <p class="note">お客さんはお店を開いている間だけ来店します。調理は担当スタッフがいるコンロだけ進みます。</p>
+    <p class="note">留守中も、カウンターの料理と調理中の料理がある間は営業します（最大${OFFLINE_MAX_SEC / 3600}時間分${rep.capped ? '。今回は上限まで営業しました' : ''}）。営業中はスタッフの体力が減り、閉店している時間は休んで回復します。</p>
     <div class="actions"><button class="btn" data-action="close">営業再開！</button></div>`);
 }
 
@@ -1212,6 +1445,8 @@ function openHelp() {
       <li>スタッフはカウンターの奥の厨房で待機し、右端のスタッフ出入口から客席へ出てカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
+      <li>スタッフには<b>体力</b>があります（★1つにつき1勤＝15分働ける分。店長は無限）。尽きると奥の<b>💤 休憩室</b>で休み、半分戻ると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1勤分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>でも回復できます。</li>
+      <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します（最大8時間分）。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
       <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
@@ -1245,8 +1480,10 @@ function addLog(text, big) {
 }
 
 // 大事なことと、カフェ画面以外にいるときはポップアップでも知らせる
+let quietToasts = false;   // 留守中の計算ではポップアップを出さない（報告にまとめる）
 function toast(text, big) {
   addLog(text, big);
+  if (quietToasts) return;
   if (!big && currentScreen === 'cafe' && $('modal').hidden) return;
   showToast(text, big);
 }
@@ -1300,6 +1537,9 @@ document.addEventListener('click', e => {
         <button class="btn danger" data-action="reset">消去する</button></div>`);
       break;
     case 'reset': resetGame(); break;
+    case 'restRoom': openRestRoom(); break;
+    case 'cheer': cheer(+d.id); break;
+    case 'drink': useDrink(+d.id, d.kind); break;
     case 'help': openHelp(); break;
     case 'close': closeModal(); break;
     default: townAction(d);
@@ -1338,6 +1578,18 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 
 new ResizeObserver(() => computeLayout()).observe(floor);
 
+const worthReport = r => r.away >= 60 * 1000 || r.served || r.done.length || r.quit.length || r.town.length;
+
+// 別のアプリに切り替えていた間も、戻ったときに追いかけて進める
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !S.savedAt || Date.now() - S.savedAt < 30 * 1000) return;
+  const rep = applyOffline(true);
+  initRuntime();
+  last = performance.now();
+  if (worthReport(rep)) openWelcome(rep);
+  renderUI();
+});
+
 // town.js を読み込んだあとに呼ぶ
 function boot() {
   const offlineReport = applyOffline();
@@ -1346,5 +1598,5 @@ function boot() {
   renderUI();
   requestAnimationFrame(frame);
   if (!S.seenHelp) openHelp();
-  else if (offlineReport.away >= 60 * 1000 || offlineReport.done.length || offlineReport.quit.length || offlineReport.town.length) openWelcome(offlineReport);
+  else if (worthReport(offlineReport)) openWelcome(offlineReport);
 }

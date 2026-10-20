@@ -298,7 +298,7 @@ const storePower = st => 1 + st.g * 2.2 + (st.boss ? BOSS_POWER : 0);
 const teamPower = members => members.reduce((a, s) => a + s.stars, 0) + secretCount() + S.up.stove * 0.5;
 const winChance = (members, st) => clamp(1 / (1 + Math.exp(-(teamPower(members) - storePower(st)) / 1.5)), 0.03, 0.97);
 const battleSec = st => 30 + st.g * 20;
-const availableForBattle = () => S.staff.filter(s => !s.owner && !s.away);
+const availableForBattle = () => S.staff.filter(s => !s.owner && !s.away && !s.rest);
 
 // おすすめメンバー（★の高い順に3人）で見た相手との差
 function difficulty(st) {
@@ -321,7 +321,7 @@ function openDispatch(storeId) {
   const type = storeType(st);
   openModal(`<div class="sheet-head"><h2>⚔️ 料理勝負：${st.name}</h2>
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
-    <p class="note">${type.emoji} ${type.type}（格 ${gradeLabel(st.g)}）に、スタッフを最大3人送り出します。勝負には ${fmtTime(battleSec(st))} かかり、その間は店で働けません。</p>
+    <p class="note">${type.emoji} ${type.type}（格 ${gradeLabel(st.g)}）に、スタッフを最大3人送り出します。勝負には ${fmtTime(battleSec(st))} かかり、その間は店で働けません。出撃すると体力を1勤分使い、休憩中の人は送り出せません。</p>
     <div class="power-line">
       <span>チーム力 <b>${teamPower(members).toFixed(1)}</b></span>
       <span>相手 <b>${storePower(st).toFixed(1)}</b></span>
@@ -346,7 +346,8 @@ function startBattle(storeId) {
   const st = storeById(storeId);
   const members = availableForBattle().filter(s => dispatchSel.includes(s.id));
   if (!st || !members.length || st.battleCd > Date.now() || S.battles.some(b => b.storeId === st.id)) return;
-  for (const s of members) { cancelTaskOf(s); s.away = 'battle'; s.walkOut = true; }
+  // 料理勝負は体力を1勤分使う
+  for (const s of members) { cancelTaskOf(s); s.away = 'battle'; s.walkOut = true; s.hp = Math.max(0, hpOf(s) - SHIFT_SEC); }
   S.battles.push({ storeId: st.id, members: members.map(s => s.id), chance: winChance(members, st),
     until: Date.now() + battleSec(st) * 1000 });
   addLog(`⚔️ ${members.map(displayName).join('・')}が「${st.name}」へ料理勝負に出かけました`);
