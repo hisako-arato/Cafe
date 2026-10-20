@@ -2,7 +2,7 @@
 
 // ===== 定数 =====
 const SAVE_KEY = 'eikyu-cafe-save-v1';
-const CONTRACT_SEC = 300;   // アルバイトの契約期間（秒）
+const CONTRACT_SEC = 24 * 3600;   // アルバイトの契約期間（1日）
 const PATIENCE_SEC = 45;    // お客さんが料理を待てる時間（秒）
 const EAT_SEC = 4;          // 食事にかかる時間（秒）
 const CUST_SPEED = 22;      // お客さんの歩く速さ（%/秒）
@@ -11,19 +11,19 @@ const MAX_STOVES = 8;        // 全ランクを通しての上限
 const MAX_TABLES = 12;
 // 体力：★1つにつき1連勤（1日働ける分）。★3でおよそ3連勤、★5でおよそ5連勤。店長は無限
 const SHIFT_SEC = 24 * 3600;
-const REST_RATE = 10;        // 休憩中は減る速さの10倍で回復
+const REST_RATE = 10;        // 休憩中は減る速さの10倍で回復（忠誠度★3のとき。★1つにつき±15%）
 const CHEER_SEC = 3600;      // 激励で1時間分回復
 const DRINK_SEC = SHIFT_SEC; // エナジードリンクで1日分回復
 
 // 店舗ランク：上げるとコンロ・テーブル・スタッフ・設備強化の上限が増える
 const RANKS = [
-// スタッフの上限は店長を含む人数。正社員の条件は、ひとつ前のランクの上限に収まる人数にしてある
-  { name: '屋台',             icon: '🛖', stoves: 2, tables: 3,  staff: 3 },
-  { name: '喫茶店',           icon: '☕', stoves: 3, tables: 4,  staff: 4,  cost: 600,   need: { level: 3,  served: 40,   perm: 1 } },
-  { name: 'カフェ',           icon: '🏠', stoves: 4, tables: 6,  staff: 6,  cost: 2500,  need: { level: 6,  served: 180,  perm: 2 } },
-  { name: '人気カフェ',       icon: '🏡', stoves: 5, tables: 8,  staff: 7,  cost: 8000,  need: { level: 10, served: 500,  perm: 4 } },
-  { name: '有名店',           icon: '🏛️', stoves: 6, tables: 10, staff: 9,  cost: 25000, need: { level: 15, served: 1200, perm: 5 } },
-  { name: '2階席のある名店', icon: '🏰', stoves: 8, tables: 12, staff: 11, cost: 70000, need: { level: 20, served: 3000, perm: 7 } },
+// スタッフの上限は店長を含む人数。perm は正社員の枠。正社員の条件は、ひとつ前のランクの枠に収まる人数にしてある
+  { name: '屋台',             icon: '🛖', stoves: 2, tables: 3,  staff: 3,  perm: 1 },
+  { name: '喫茶店',           icon: '☕', stoves: 3, tables: 4,  staff: 4,  perm: 2, cost: 600,   need: { level: 3,  served: 40,   perm: 1 } },
+  { name: 'カフェ',           icon: '🏠', stoves: 4, tables: 6,  staff: 6,  perm: 4, cost: 2500,  need: { level: 6,  served: 180,  perm: 2 } },
+  { name: '人気カフェ',       icon: '🏡', stoves: 5, tables: 8,  staff: 7,  perm: 5, cost: 8000,  need: { level: 10, served: 500,  perm: 4 } },
+  { name: '有名店',           icon: '🏛️', stoves: 6, tables: 10, staff: 9,  perm: 7, cost: 25000, need: { level: 15, served: 1200, perm: 5 } },
+  { name: '2階席のある名店', icon: '🏰', stoves: 8, tables: 12, staff: 11, perm: 8, cost: 70000, need: { level: 20, served: 3000, perm: 7 } },
 ];
 
 // 設備強化（上限は店舗ランク + 1、最大 Lv6）
@@ -105,6 +105,41 @@ function protagLook(w = S.wardrobe) {
   return { ...Chara.OWNER_LOOK, style: h.style, hair: HAIR_COLORS[h.color].c, hair2: HAIR_COLORS[h.color].c2 };
 }
 
+// ===== 従業員の能力 =====
+// 能力ごとに★1〜5。種類はここに足せば増やせる
+const STATS = [
+  { id: 'hp',    icon: '💪', name: '体力',   desc: '体力の最大値（★1つ＝1日分）' },
+  { id: 'cook',  icon: '🍳', name: '調理',   desc: '調理の速さ' },
+  { id: 'serve', icon: '🏃', name: '配膳',   desc: '歩く速さと片付けの速さ' },
+  { id: 'loyal', icon: '🤝', name: '忠誠度', desc: '激励・ドリンクで不満が溜まりにくい・休憩からの復帰が速い' },
+];
+// 4種類の合計から総合評価（C／B／A／S／SS）
+const GRADES = [
+  { min: 0,  label: 'C' }, { min: 8, label: 'B' }, { min: 12, label: 'A' }, { min: 16, label: 'S' }, { min: 20, label: 'SS' },
+];
+const statOne = v => Math.max(1, Math.min(5, Math.round(v)));
+// 平均 avg のまわりに±1の幅で能力を振る。top を指定すると、どれか1つが必ず★5
+function genStats(avg, top) {
+  const st = {};
+  for (const k of STATS) st[k.id] = statOne(avg + Math.floor(Math.random() * 3) - 1);
+  if (top) st[rand(STATS).id] = 5;
+  return st;
+}
+// 能力を持っていない古いデータは、元の★から振り分ける
+function statsOf(p) {
+  if (!p.stats) p.stats = genStats(p.stars || 1);
+  for (const k of STATS) if (!p.stats[k.id]) p.stats[k.id] = statOne(p.stars || 1);
+  return p.stats;
+}
+const statTotal = p => STATS.reduce((a, k) => a + statsOf(p)[k.id], 0);
+const powerOf = p => statTotal(p) / STATS.length;   // 旧来の★に相当する強さ（勝負・料金に使う）
+const gradeIdx = p => { const t = statTotal(p) * 4 / STATS.length; let i = 0; GRADES.forEach((g, j) => { if (t >= g.min) i = j; }); return i; };
+const gradeOf = p => GRADES[gradeIdx(p)].label;
+function statsHTML(p, owner) {
+  const st = statsOf(p);
+  return `<div class="stats-grid">${STATS.map(k => `<span title="${k.name}：${k.desc}">${k.icon}<i class="stars">${owner && k.id === 'hp' ? '∞' : owner && k.id === 'loyal' ? '－' : '★'.repeat(st[k.id]) + '☆'.repeat(5 - st[k.id])}</i></span>`).join('')}</div>`;
+}
+const gradeBadge = p => `<span class="grade-badge g${gradeOf(p)}">${gradeOf(p)}</span>`;
 // ===== 状態 =====
 function newGame() {
   const wardrobe = { owned: ['maid'], eq: { body: 'maid', head: null, face: null, item: null }, hair: { style: 'long', color: 'pink' } };
@@ -112,8 +147,6 @@ function newGame() {
     money: 150,
     level: 1,
     xp: 0,
-    contracts: 1,
-    contractsBought: 0,
     rank: 0,
     up: { stove: 0, table: 0 },
     stoves: [newStove(), newStove()],
@@ -121,7 +154,7 @@ function newGame() {
     decor: {},
     counter: [],
     staff: [{ id: 1, name: '店長', g: 'f', nation: null, look: protagLook(wardrobe),
-      stars: 3, type: 'perm', expireAt: 0, owner: true, post: 'any' }],
+      stats: { hp: 3, cook: 3, serve: 3, loyal: 3 }, type: 'perm', expireAt: 0, owner: true, post: 'any' }],
     nextId: 2,
     stats: { served: 0, hired: 0, promoted: 0 },
     seenHelp: false,
@@ -178,7 +211,10 @@ function migrate(s) {
   });
   for (const m of s.staff) {
     if (!m.post) m.post = 'any';
-    if (!m.owner && !Number.isFinite(m.hp)) { m.hp = m.stars * SHIFT_SEC; m.rest = false; }
+    statsOf(m);
+    if (m.owner) m.stats = { hp: 3, cook: 3, serve: 3, loyal: 3 };
+    if (!m.owner && !Number.isFinite(m.hp)) { m.hp = m.stats.hp * SHIFT_SEC; m.rest = false; }
+    if (!m.owner) m.hp = Math.min(m.hp, m.stats.hp * SHIFT_SEC);
     // 主人公（店長）はいつも最新の見た目で
     if (m.owner) { m.look = protagLook(s.wardrobe); m.g = 'f'; continue; }
     // 勝負に出ていない人が出かけたままになっていたら戻す
@@ -195,8 +231,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse })),
+    staff: S.staff.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse }) =>
+      ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -226,7 +262,7 @@ function applyOffline(resume = false) {
   if (total < 1) return rep;
 
   const start = since;
-  const level0 = S.level, contracts0 = S.contracts;
+  const level0 = S.level;
   const progressed = new Set();
   const custPerMin = Math.min(60 / spawnInterval(), S.tableCount * 60 / (EAT_SEC + 20));
   let acc = 0, xp = 0;
@@ -283,7 +319,7 @@ function applyOffline(resume = false) {
     // 体力：営業中は減り、閉店中は休んで回復する
     for (const s of S.staff) {
       if (s.owner || s.away) continue;
-      if (!open && !s.rest) { s.hp = Math.min(maxHp(s), hpOf(s) + REST_RATE * dt); continue; }
+      if (!open && !s.rest) { s.hp = Math.min(maxHp(s), hpOf(s) + restRate(s) * dt); continue; }
       const r = tickStamina(s, dt);
       if (r === 'out') {
         S.stoves.forEach(st => { if (st.cook === s.id) st.cook = null; });
@@ -296,7 +332,7 @@ function applyOffline(resume = false) {
   quietToasts = true;
   if (xp) addXp(xp);
   quietToasts = false;
-  if (S.level > level0) rep.level = [level0, S.level, S.contracts - contracts0];
+  if (S.level > level0) rep.level = [level0, S.level];
   S.stoves.forEach((st, i) => { if (st.dish && st.progress < st.duration && !progressed.has(i)) rep.idle.push({ i, dish: st.dish }); });
   for (const s of S.staff) {
     if (s.rest && !s.away) rep.tired.push({ name: displayName(s), left: restLeft(s) });
@@ -337,25 +373,25 @@ const servingsOf = d => d.servings + S.up.stove;
 const patienceSec = () => PATIENCE_SEC * (1 + S.up.table * 0.1);
 const xpNeeded = l => Math.round(12 * Math.pow(l, 1.5));
 const spawnInterval = () => Math.max(2, 8 - popularity() * 0.06 - S.level * 0.15);
-const speedOf = s => 14 + s.stars * 5;
-const cleanTime = s => 2.4 - s.stars * 0.3;
-const cookRate = s => (0.8 + (s.stars - 1) * 0.1) * (1 + S.up.stove * 0.15);
-const scoutFee = stars => 20 + stars * stars * 15;
+const speedOf = s => 14 + statsOf(s).serve * 5;
+const cleanTime = s => 2.4 - statsOf(s).serve * 0.3;
+const cookRate = s => (0.8 + (statsOf(s).cook - 1) * 0.1) * (1 + S.up.stove * 0.15);
+const scoutFee = p => Math.round(20 + powerOf(p) * powerOf(p) * 15);
 const stovePrice = () => Math.round(150 * Math.pow(2, S.stoves.length - 2));
 const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
-const contractPrice = () => Math.round(1000 * Math.pow(1.6, S.contractsBought));
-// 永久雇用契約はレベル2つごとに1枚もらえる
-const contractAtLevel = lv => lv % 2 === 0;
+const permSlots = () => rankOf().perm;
 const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.01) * (1 + S.up.table * 0.1));
 // ===== 体力 =====
-const maxHp = s => s.stars * SHIFT_SEC;
+const maxHp = s => statsOf(s).hp * SHIFT_SEC;
 const hpOf = s => s.owner ? Infinity : Number.isFinite(s.hp) ? s.hp : maxHp(s);
 const onDuty = s => !s.away && !s.rest;
 const drinkPrice = () => 200 * (S.rank + 1);
 const days = sec => (sec / SHIFT_SEC).toFixed(1);
 // 休憩中の人は体力が満タンになると職場に戻る
-const restLeft = s => Math.max(0, (maxHp(s) - hpOf(s)) / REST_RATE);
+// 忠誠度が高いほど休憩からの復帰が速い
+const restRate = s => REST_RATE * (1 + (statsOf(s).loyal - 3) * 0.15);
+const restLeft = s => Math.max(0, (maxHp(s) - hpOf(s)) / restRate(s));
 
 function exhaust(s) {
   cancelTaskOf(s);
@@ -377,7 +413,7 @@ function tickStamina(s, dt) {
   if (s.away) return;
   if (!Number.isFinite(s.hp)) s.hp = maxHp(s);
   if (s.rest) {
-    s.hp = Math.min(maxHp(s), s.hp + REST_RATE * dt);
+    s.hp = Math.min(maxHp(s), s.hp + restRate(s) * dt);
     if (s.hp >= maxHp(s)) return 'back';
   } else {
     s.hp -= dt;
@@ -525,8 +561,8 @@ function fmtTime(sec) {
   const m = Math.floor(sec / 60), s = sec % 60;
   return s ? `${m}分${s}秒` : `${m}分`;
 }
-// 野良のお客さんは★1〜2が中心（まれに★3）。強い人材は引き抜き作戦で
-function rollStars() {
+// 野良のお客さんは平均★1〜2が中心（まれに★3）
+function rollAvg() {
   const r = Math.random();
   if (r < 0.62) return 1;
   if (r < 0.95) return 2;
@@ -580,10 +616,8 @@ function addXp(n) {
   while (S.xp >= xpNeeded(S.level)) {
     S.xp -= xpNeeded(S.level);
     S.level++;
-    const gift = contractAtLevel(S.level);
-    if (gift) S.contracts++;
     const unlocked = DISHES.filter(d => d.level === S.level).map(d => d.emoji + d.name);
-    toast(`🎉 レベル${S.level}になりました！${gift ? ' 永久雇用契約 📜 +1' : ''}`, true);
+    toast(`🎉 レベル${S.level}になりました！`, true);
     if (unlocked.length) toast(`新メニュー解禁：${unlocked.join('、')}`);
   }
 }
@@ -591,7 +625,7 @@ function addXp(n) {
 function hire(cid) {
   const c = customers.find(c => c.id === cid);
   if (!c || (c.state !== 'wait' && c.state !== 'eat')) { closeModal(); return; }
-  const fee = scoutFee(c.stars);
+  const fee = scoutFee(c);
   if (S.money < fee || S.staff.length >= staffCap()) return;
   S.money -= fee;
   if (c.server) cancelTaskOf(S.staff.find(s => s.id === c.server));
@@ -600,7 +634,7 @@ function hire(cid) {
   t.cust = null;
   customers.splice(customers.indexOf(c), 1);
   const s = {
-    id: S.nextId++, name: c.name, g: c.g, nation: c.nation, look: c.look, stars: c.stars,
+    id: S.nextId++, name: c.name, g: c.g, nation: c.nation, look: c.look, stats: { ...statsOf(c) },
     type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000, owner: false, post: 'any',
     x: c.x, y: c.y, task: null,
   };
@@ -613,8 +647,7 @@ function hire(cid) {
 
 function promote(id) {
   const s = S.staff.find(s => s.id === id);
-  if (!s || s.type !== 'part' || S.contracts <= 0) return;
-  S.contracts--;
+  if (!s || s.type !== 'part' || permCount() >= permSlots()) return;
   s.type = 'perm';
   s.expireAt = 0;
   S.stats.promoted++;
@@ -706,13 +739,6 @@ function buy(kind, id) {
     S.money -= drinkPrice();
     S.drinks = (S.drinks || 0) + 1;
     toast(`🥤 エナジードリンクを買いました（所持 ${S.drinks}本）`);
-  } else if (kind === 'contract') {
-    const p = contractPrice();
-    if (S.money < p) return;
-    S.money -= p;
-    S.contractsBought++;
-    S.contracts++;
-    toast('📜 永久雇用契約を1枚手に入れました');
   }
   save();
 }
@@ -759,14 +785,14 @@ function spawnCustomer() {
   const ti = tables.findIndex(t => t.state === 'free');
   if (ti < 0) return false;
   const c = {
-    id: uid++, ...randomPerson(), stars: rollStars(),
+    id: uid++, ...randomPerson(), stats: genStats(rollAvg()),
     x: L.door.x, y: L.door.y, table: ti, state: 'in',
     patience: patienceSec(), maxPatience: patienceSec(), server: null, dish: null, eat: 0, flip: true,
   };
   tables[ti].state = 'occupied';
   tables[ti].cust = c.id;
   customers.push(c);
-  addLog(`🚪 ${NATIONS[c.nation].flag} ${displayName(c)}が来店しました${c.stars >= 4 ? '（✨ 仕事ができそう！）' : ''}`);
+  addLog(`🚪 ${NATIONS[c.nation].flag} ${displayName(c)}が来店しました${gradeIdx(c) >= 2 ? '（✨ 仕事ができそう！）' : ''}`);
   return true;
 }
 
@@ -1006,7 +1032,7 @@ function renderFloor() {
   });
 
   for (const c of customers) {
-    const el = floorEl('c' + c.id, 'person customer' + (c.stars >= 4 ? ' rare' : ''), PERSON_HTML);
+    const el = floorEl('c' + c.id, 'person customer' + (gradeIdx(c) >= 2 ? ' rare' : ''), PERSON_HTML);
     if (!el._init) {
       el._init = true;
       el.dataset.action = 'scout';
@@ -1076,7 +1102,7 @@ function renderFloor() {
       el._k = k;
       el.className = 'stove-unit ' + info.kind;
       el.dataset.action = info.kind === 'idle' ? 'pick' : info.kind === 'ready' ? 'collect' : 'screen';
-      el.dataset.screen = 'kitchen';
+      if (info.kind === 'idle' || info.kind === 'ready') delete el.dataset.screen; else el.dataset.screen = 'kitchen';
       el.setAttribute('aria-label', `コンロ${i + 1}`);
       el.innerHTML = `<span>${info.kind === 'idle' ? '🔥' : DISH[st.dish].emoji}</span>${info.kind === 'cooking' || info.kind === 'waiting' ? '<i class="fill"></i>' : ''}`;
     }
@@ -1215,15 +1241,15 @@ function floatText(text, x, y, bad) {
 let currentScreen = 'cafe';
 let kitchenTab = 'cook';
 
-function card(p, role, stars) {
-  return `<div class="card r${stars}">${Chara.portrait(p.look, role)}</div>`;
+function card(p, role) {
+  return `<div class="card r${gradeIdx(p) + 1}">${Chara.portrait(p.look, role)}</div>`;
 }
 
 function renderHud() {
   $('money').textContent = yen(S.money);
   $('level').textContent = S.level;
   $('xpbar').style.width = Math.min(100, S.xp / xpNeeded(S.level) * 100) + '%';
-  $('contracts').textContent = S.contracts;
+  $('contracts').textContent = `${permCount()}/${permSlots()}`;
   $('pop').textContent = popularity();
   $('rankName').textContent = rankOf().icon + ' ' + rankOf().name;
   const ready = S.stoves.some((_, i) => stoveInfo(i).kind === 'ready');
@@ -1260,7 +1286,7 @@ function renderCook(el) {
       const who = s.kind === 'cooking' ? `${displayName(s.cook)}が調理中`
         : s.cook ? `${displayName(s.cook)}が向かっています` : '調理スタッフ待ち…';
       return `<div class="stove ${s.kind}">
-        <div class="stove-head">${s.cook ? card(s.cook, roleOf(s.cook), s.cook.stars) : ''}<div class="big">${d.emoji}</div></div>
+        <div class="stove-head">${s.cook ? card(s.cook, roleOf(s.cook)) : ''}<div class="big">${d.emoji}</div></div>
         ${d.name}<div class="bar"><i data-prog="${i}"></i></div>
         <span>${who}</span><span data-left="${i}"></span></div>`;
     }).join('')}</div>`);
@@ -1285,21 +1311,22 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), S.contracts, staffCap(), S.drinks].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), permCount(), permSlots(), staffCap(), S.drinks].join('|');
   setKeyed(el, 'staff', key, `
-    <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 永久雇用契約 × ${S.contracts}</h3>
+    <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 正社員の枠 ${permCount()}/${permSlots()}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
-    永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約はレベル2つごと（偶数レベル）に1枚もらえるほか、ショップで買えます。</p>
+    永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数（正社員の枠）は店舗ランクで増えます。正社員を解雇すると枠が1つ空きます。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
-    <p class="note"><b>体力</b>：★1つにつき1連勤（1日働ける分）。尽きると💤休憩室で休み、満タンになると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
+    <p class="note"><b>能力</b>：💪体力（★1つ＝1日働ける）／🍳調理（調理の速さ）／🏃配膳（歩く・片付けの速さ）／🤝忠誠度（不満が溜まりにくく、休憩からの復帰が速い）。総合評価は4つの合計で C〜SS。<b>体力</b>が尽きると💤休憩室で休み、満タンになると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
-        ${card(s, roleOf(s), s.stars)}
+        ${card(s, roleOf(s))}
         <div class="info">
           <div class="name">${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}
             <span class="badge ${roleOf(s)}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
           ${s.title ? `<div class="sub">${s.boss ? '👑' : '🏷️'} 元「${s.from}」の${s.title}</div>` : ''}
-          <div class="sub">速さ <span class="stars">${starStr(s.stars)}</span>　<span data-status="${s.id}"></span></div>
+          <div class="sub">${s.owner ? '' : `総合 ${gradeBadge(s)}　`}<span data-status="${s.id}"></span></div>
+          ${statsHTML(s, s.owner)}
           ${hpBar(s)}
           ${s.type === 'part' ? `<div class="bar contract"><i data-contract="${s.id}"></i></div>
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
@@ -1308,7 +1335,7 @@ function renderStaff(el) {
         </div>
         <div class="staff-actions">
           ${s.type === 'part'
-            ? `<button class="btn blue small" data-action="promote" data-id="${s.id}" ${S.contracts > 0 ? '' : 'disabled'}>📜 正社員にする</button>`
+            ? `<button class="btn blue small" data-action="promote" data-id="${s.id}" ${permCount() < permSlots() ? '' : 'disabled'}>📜 正社員にする</button>`
             : ''}
           ${s.rest && !s.away ? `<button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>` : ''}
           ${drinkButton(s)}
@@ -1338,12 +1365,12 @@ function itemRow(ico, name, sub, price, action, extra, disabled, label) {
 }
 
 function renderShop(el) {
-  const sp = stovePrice(), tp = tablePrice(), cp = contractPrice();
+  const sp = stovePrice(), tp = tablePrice();
   const stoveMax = S.stoves.length >= stoveCap(), tableMax = S.tableCount >= tableCap();
-  const key = [sp, tp, cp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(),
+  const key = [sp, tp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(),
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
     ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
-    S.money >= sp, S.money >= tp, S.money >= cp, S.drinks, S.money >= drinkPrice()].join('|');
+    S.money >= sp, S.money >= tp, S.drinks, S.money >= drinkPrice()].join('|');
   const next = RANKS[S.rank + 1];
   setKeyed(el, 'shop', key, `
     <h3>設備</h3>
@@ -1371,11 +1398,6 @@ function renderShop(el) {
     <div class="item-list">
       ${itemRow('🥤', 'エナジードリンク', `スタッフの体力を1日分回復（スタッフタブ・休憩室で飲ませる）　所持 ${S.drinks || 0}本`, drinkPrice(), 'buy',
         'data-kind="drink"', S.money < drinkPrice())}
-    </div>
-    <h3>契約</h3>
-    <div class="item-list">
-      ${itemRow('📜', '永久雇用契約', 'アルバイトを正社員にできる契約書。買うたびに値上がりします', cp, 'buy',
-        'data-kind="contract"', S.money < cp)}
     </div>
 `);
 }
@@ -1496,7 +1518,7 @@ function hpBar(s) {
   if (s.owner) return '<div class="sub">体力 ∞</div>';
   const r = hpOf(s) / maxHp(s);
   return `<div class="bar hp ${r < 0.2 ? 'low' : ''}" data-hp="${s.id}"><i style="width:${(r * 100).toFixed(1)}%"></i></div>
-    <div class="sub">体力 ${days(hpOf(s))}/${s.stars}日${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}</div>`;
+    <div class="sub">体力 ${days(hpOf(s))}/${statsOf(s).hp}日${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}</div>`;
 }
 function drinkButton(s) {
   if (s.owner || s.away || !S.drinks || hpOf(s) >= maxHp(s)) return '';
@@ -1510,7 +1532,7 @@ function useDrink(id) {
   s.hp = Math.min(maxHp(s), hpOf(s) + DRINK_SEC);
   const wasRest = s.rest;
   if (s.rest && s.hp >= maxHp(s)) backToWork(s, `☕ ${displayName(s)}が体力満タンで職場に戻りました`);
-  toast(`🥤 ${displayName(s)}がエナジードリンクを飲みました（体力 ${days(s.hp)}/${s.stars}日）`);
+  toast(`🥤 ${displayName(s)}がエナジードリンクを飲みました（体力 ${days(s.hp)}/${statsOf(s).hp}日）`);
   react(s, !wasRest ? 'drinkWork' : s.rest ? 'drinkRest' : 'drinkFull');
   afterRestChange();
 }
@@ -1524,7 +1546,7 @@ function openRestRoom() {
     <p class="note">🥤 エナジードリンク × ${S.drinks || 0}本（1日分回復。ショップで買えます）</p>
     <div class="staff-list">${list.length ? list.map(s => `
       <div class="row">
-        ${card(s, roleOf(s), s.stars)}
+        ${card(s, roleOf(s))}
         <div class="info"><div class="name">${displayName(s)} <span class="badge ${roleOf(s)}">${s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
           ${hpBar(s)}${s.say && s.say.until > Date.now() ? `<div class="say-line">💬 「${s.say.text}」</div>` : ''}</div>
         <div class="staff-actions">
@@ -1559,13 +1581,14 @@ const REACTIONS = {
   ],
   angry: [
     'この店、36協定って出してます？', '求人票に「アットホームな職場」って書いてありましたよね', '永久雇用契約って、永久に休めない契約のことだったんですね',
-    '店長の血の色、何色ですか？', '辞めたいって言ったら、また契約書出てくるんですよね…', 'ブラック企業大賞、狙ってます？',
+    '店長の血の色、何色ですか？', '辞めたいって言ったら、また「永久」の二文字を見せられるんですよね…', 'ブラック企業大賞、狙ってます？',
   ],
 };
 const SAY_MS = 5000;
 function react(s, kind) {
   s.abuse = (s.abuse || 0) + 1;
-  const pool = s.abuse >= 4 ? [...REACTIONS[kind], ...REACTIONS.angry, ...REACTIONS.angry] : REACTIONS[kind];
+  // 忠誠度が高いほど、きつい台詞が出るまでの回数が多い（★×2回）
+  const pool = s.abuse >= statsOf(s).loyal * 2 ? [...REACTIONS[kind], ...REACTIONS.angry, ...REACTIONS.angry] : REACTIONS[kind];
   const line = rand(pool);
   s.say = { text: line, until: Date.now() + SAY_MS };
   toast(`💬 ${displayName(s)}：「${line}」`);
@@ -1595,7 +1618,7 @@ function updateHpBars(root) {
     const r = hpOf(s) / maxHp(s);
     el.querySelector('i').style.width = (r * 100).toFixed(1) + '%';
     el.classList.toggle('low', r < 0.2);
-    el.nextElementSibling.textContent = `体力 ${days(hpOf(s))}/${s.stars}日${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}`;
+    el.nextElementSibling.textContent = `体力 ${days(hpOf(s))}/${statsOf(s).hp}日${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}`;
   }
 }
 
@@ -1603,7 +1626,7 @@ function updateHpBars(root) {
 function openWelcome(rep) {
   const items = [
     ...(rep.served ? [`<li class="good">🍽️ 留守中も営業して <b>${rep.served.toLocaleString('ja-JP')}人</b>を接客し、<b>${yen(rep.sales)}</b> の売上がありました</li>`] : []),
-    ...(rep.level ? [`<li class="good">🎉 レベル${rep.level[0]} → <b>レベル${rep.level[1]}</b>になりました！${rep.level[2] ? ` 永久雇用契約 📜 +${rep.level[2]}` : ''}</li>`] : []),
+    ...(rep.level ? [`<li class="good">🎉 レベル${rep.level[0]} → <b>レベル${rep.level[1]}</b>になりました！</li>`] : []),
     ...(rep.soldOut ? ['<li class="bad">🈳 カウンターの料理が売り切れて、途中で閉店しました。出かける前に多めに作っておきましょう</li>'] : []),
     ...rep.done.map(d => `<li class="good">${DISH[d.dish].emoji} コンロ${d.i + 1}：${d.cook}が<b>${DISH[d.dish].name}</b>を作り、${d.n}人前をカウンターに並べました</li>`),
     ...S.stoves.map((st, i) => st.dish && st.progress < st.duration && !rep.idle.some(d => d.i === i)
@@ -1649,16 +1672,16 @@ function openDishPicker(i) {
 function openScout(cid) {
   const c = customers.find(c => c.id === cid);
   if (!c || (c.state !== 'wait' && c.state !== 'eat')) return;
-  const fee = scoutFee(c.stars);
+  const fee = scoutFee(c);
   const full = S.staff.length >= staffCap();
   const n = NATIONS[c.nation];
   openModal(`
     <div class="profile">
-      <div class="card big r${c.stars}">${Chara.portrait(c.look, 'customer')}</div>
+      <div class="card big r${gradeIdx(c) + 1}">${Chara.portrait(c.look, 'customer')}</div>
       <div>
         <h2>${displayName(c)}</h2>
         <p class="sub">${n.flag} ${n.name}出身</p>
-        <p>仕事の速さ <span class="stars">${starStr(c.stars)}</span></p>
+        <p>総合 ${gradeBadge(c)}</p>${statsHTML(c)}
       </div>
     </div>
     <p>アルバイトとしてスカウトしますか？ 契約期間は <b>${fmtTime(CONTRACT_SEC)}</b> です。
@@ -1681,10 +1704,10 @@ function openHelp() {
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
       <li>カフェ画面右上の<b>🛠 配置</b>で、テーブル・コンロ・観葉植物などをドラッグして好きな場所へ動かせます。</li>
-      <li>スタッフには<b>体力</b>があります（★1つにつき1連勤＝1日働ける分。店長は無限）。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
+      <li>スタッフは<b>能力</b>（💪体力・🍳調理・🏃配膳・🤝忠誠度）をそれぞれ★1〜5で持ち、合計から総合評価（C〜SS）が決まります。<b>体力</b>は★1つにつき1日働ける分（店長は無限）。忠誠度が高いほど休憩からの復帰が速く、激励やドリンクへの不満も溜まりにくくなります。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
-      <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベル2つごと（偶数レベル）に1枚もらえるほか、ショップで買えます。</li>
+      <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数は<b>正社員の枠</b>で決まり、店舗ランクを上げると増えます。正社員を解雇すると枠が1つ空き、また契約できます。</li>
       <li>下のメニューは「<b>☕ カフェ</b>（店内の様子）／<b>🏪 お店</b>（調理・スタッフ・ショップ・店舗ランク）／<b>👩‍🍳 店長</b>（ステータス・身支度・記録・設定）／<b>🗺️ 街</b>（ライバル店）」です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
       <li><b>🗺️ 街</b>では<b>引き抜き作戦</b>ができます。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
       <li>条件を満たすと街に<b>👑 名店（ボス）</b>が現れます。料理勝負で勝つと<b>限定アイテム</b>、潜入や勝負で<b>固有レシピ</b>、口説き落とすと専用の制服を着た<b>エース</b>が手に入ります。3つそろえると制覇です。</li>
@@ -1766,7 +1789,7 @@ document.addEventListener('click', e => {
       const s = S.staff.find(s => s.id === +d.id);
       if (!s) break;
       openModal(`<h2>${displayName(s)}を解雇しますか？</h2>
-        <p>${s.type === 'perm' ? '正社員を解雇すると、使った永久雇用契約は戻りません。' : 'アルバイトの契約を打ち切ります。'}</p>
+        <p>${s.type === 'perm' ? '正社員を解雇すると、正社員の枠が1つ空きます。' : 'アルバイトの契約を打ち切ります。'}</p>
         <div class="actions"><button class="btn ghost" data-action="close">やめる</button>
         <button class="btn danger" data-action="fire" data-id="${s.id}">解雇する</button></div>`);
       break;

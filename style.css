@@ -1121,3 +1121,16 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .person.say-l .say::after { left: 3cqw; }
 .person.say-r .say { left: auto; right: 0; transform: none; }
 .person.say-r .say::after { left: auto; right: 3cqw; transform: none; }
+
+/* 従業員の能力（★1〜5 × 種類） */
+.stats-grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 0 10px; margin-top: 2px; font-size: .72rem; }
+.stats-grid span { white-space: nowrap; }
+.stats-grid .stars { font-style: normal; letter-spacing: -1px; margin-left: 2px; }
+.grade-badge {
+  display: inline-block; min-width: 1.8em; text-align: center; font-weight: 900; font-size: .72rem;
+  border-radius: 6px; padding: 0 5px; color: #fff; background: #94a3b8;
+}
+.grade-badge.gB { background: #22c55e; }
+.grade-badge.gA { background: #3b82f6; }
+.grade-badge.gS { background: linear-gradient(90deg, #f59e0b, #ec4899); }
+.grade-badge.gSS { background: linear-gradient(90deg, #a855f7, #ec4899, #f59e0b); }

@@ -64,19 +64,19 @@ const STORE_UNIFORMS = {
 // ボスの店（名店）。格の条件を満たすと街に現れ、制覇するまで残り続ける
 const BOSSES = [
   { id: 'noir', g: 3, name: '純喫茶ノワール', type: '伝説の純喫茶', emoji: '🖤', style: 'cool', recipe: 'siphon', item: 'garcon',
-    ace: { name: 'クラウディア', nation: 'de', g: 'f', title: '伝説のバリスタ', stars: 5, ideal: 64, persona: 'cool', style: 'cool',
+    ace: { name: 'クラウディア', nation: 'de', g: 'f', title: '伝説のバリスタ', ideal: 64, persona: 'cool', style: 'cool',
       look: { hair: '#22223a', style: 'bob', eye: '#e11d48', skin: '#ffe6d5', mouth: 'smile', uniform: { body: 'garcon', face: 'monocle' } } } },
   { id: 'burger', g: 5, name: 'ワールドバーガー本店', type: '巨大チェーンの本店', emoji: '👑', style: 'casual', recipe: 'bigburger', item: 'starcap',
-    ace: { name: 'ジョージ', nation: 'gb', g: 'm', title: '最速の店長代理', stars: 5, ideal: 80, persona: 'passion', style: 'casual',
+    ace: { name: 'ジョージ', nation: 'gb', g: 'm', title: '最速の店長代理', ideal: 80, persona: 'passion', style: 'casual',
       look: { hair: '#eab04a', style: 'spiky', eye: '#2f7cf6', skin: '#fdd8bf', mouth: 'open', uniform: { body: 'fastfood', head: 'starcap' } } } },
   { id: 'ginrei', g: 7, name: '鮨 銀嶺 本店', type: '老舗の名店', emoji: '🎏', style: 'elegant', recipe: 'omakase', item: 'kappo',
-    ace: { name: 'ミコワイ', nation: 'pl', g: 'm', title: '若き天才板前', stars: 5, ideal: 96, persona: 'struggle', style: 'casual',
+    ace: { name: 'ミコワイ', nation: 'pl', g: 'm', title: '若き天才板前', ideal: 96, persona: 'struggle', style: 'casual',
       look: { hair: '#3a2a2a', style: 'short', eye: '#14b8a6', skin: '#f7c9a6', mouth: 'smile', uniform: { body: 'kappo', head: 'hachimaki' } } } },
   { id: 'etoile', g: 9, name: 'パティスリー・エトワール', type: '星付きパティスリー', emoji: '🌠', style: 'cute', recipe: 'souffle', item: 'patissier',
-    ace: { name: 'アメリア', nation: 'gb', g: 'f', title: '天才パティシエール', stars: 5, ideal: 112, persona: 'dreamer', style: 'cute',
+    ace: { name: 'アメリア', nation: 'gb', g: 'f', title: '天才パティシエール', ideal: 112, persona: 'dreamer', style: 'cute',
       look: { hair: '#f6d66b', style: 'twin', eye: '#a855f7', skin: '#ffe6d5', mouth: 'cat', accColor: '#f472b6', uniform: { body: 'patissier', head: 'ribbon' } } } },
   { id: 'soleil', g: 10, name: '三ツ星 ル・ソレイユ', type: '三ツ星フレンチ', emoji: '🌞', style: 'elegant', recipe: 'grandcourse', item: 'gown',
-    ace: { name: 'ジョヴァンニ', nation: 'it', g: 'm', title: '伝説のシェフ', stars: 5, ideal: 128, persona: 'gentle', style: 'elegant',
+    ace: { name: 'ジョヴァンニ', nation: 'it', g: 'm', title: '伝説のシェフ', ideal: 128, persona: 'gentle', style: 'elegant',
       look: { hair: '#e3e3f0', style: 'swept', eye: '#f59e0b', skin: '#eab48c', mouth: 'smile', uniform: { body: 'chefcoat', head: 'chefhat' } } } },
 ];
 const BOSS = Object.fromEntries(BOSSES.map(b => [b.id, b]));
@@ -197,9 +197,10 @@ const alertMult = store => clamp(1 - blend(store) / 120, 0.3, 1.3);
 function genNpc(g, ace, type) {
   const p = randomPerson();
   p.look.uniform = STORE_UNIFORMS[g];
-  const stars = Math.min(5, 2 + Math.floor((g - 1) / 3) + (Math.random() < 0.4 ? 1 : 0) + (ace ? 1 : 0));
+  // 格が高い店ほど能力が高い。エースはどれか1つが必ず★5
+  const avg = Math.min(5, 2 + Math.floor((g - 1) / 3) + (Math.random() < 0.4 ? 1 : 0) + (ace ? 1 : 0));
   return {
-    id: S.town.nextId++, ...p, stars, ace,
+    id: S.town.nextId++, ...p, stats: genStats(avg, ace), ace,
     title: ace ? type.ace : rand(NPC_TITLES),
     ideal: 12 + g * 10 + Math.round(Math.random() * 8 - 4) + (ace ? 8 : 0),
     aff: 0,
@@ -230,7 +231,7 @@ function genBossStore(b) {
   const a = b.ace;
   const look = { ...Chara.randomLook(a.g), ...a.look };
   const ace = {
-    id: S.town.nextId++, name: a.name, nation: a.nation, g: a.g, look, stars: a.stars, ace: true, bossAce: b.id,
+    id: S.town.nextId++, name: a.name, nation: a.nation, g: a.g, look, stats: genStats(4.6, true), ace: true, bossAce: b.id,
     title: a.title, ideal: a.ideal, aff: 0, persona: a.persona, style: a.style, known: {},
   };
   const type = { ace: a.title };
@@ -295,14 +296,14 @@ function settleAlert(st) {
 // ===== 料理勝負（メンバーを送り出して結果を待つ）=====
 const secretCount = () => S.recipes.length;
 const storePower = st => 1 + st.g * 2.2 + (st.boss ? BOSS_POWER : 0);
-const teamPower = members => members.reduce((a, s) => a + s.stars, 0) + secretCount() + S.up.stove * 0.5;
+const teamPower = members => members.reduce((a, s) => a + powerOf(s), 0) + secretCount() + S.up.stove * 0.5;
 const winChance = (members, st) => clamp(1 / (1 + Math.exp(-(teamPower(members) - storePower(st)) / 1.5)), 0.03, 0.97);
 const battleSec = st => 30 + st.g * 20;
 const availableForBattle = () => S.staff.filter(s => !s.owner && !s.away && !s.rest);
 
-// おすすめメンバー（★の高い順に3人）で見た相手との差
+// おすすめメンバー（総合力の高い順に3人）で見た相手との差
 function difficulty(st) {
-  const best = [...availableForBattle()].sort((a, b) => b.stars - a.stars).slice(0, 3);
+  const best = [...availableForBattle()].sort((a, b) => powerOf(b) - powerOf(a)).slice(0, 3);
   const diff = teamPower(best) - storePower(st);
   if (diff >= 2) return { label: '格下', cls: 'easy' };
   if (diff > -2) return { label: '同格', cls: 'even' };
@@ -327,10 +328,10 @@ function openDispatch(storeId) {
       <span>相手 <b>${storePower(st).toFixed(1)}</b></span>
       <span>勝率 <b class="${p >= .7 ? 'good' : p >= .4 ? '' : 'bad'}">${Math.round(p * 100)}%</b></span>
     </div>
-    <p class="note">チーム力 ＝ メンバーの★の合計 ＋ 引き抜いたレシピの数 ＋ コンロ強化</p>
+    <p class="note">チーム力 ＝ メンバーの総合力（能力の平均）の合計 ＋ 引き抜いたレシピの数 ＋ コンロ強化</p>
     <div class="pick-list">${pool.length ? pool.map(s => `
       <button class="pick ${dispatchSel.includes(s.id) ? 'on' : ''}" data-action="pickMember" data-store="${st.id}" data-id="${s.id}">
-        ${card(s, roleOf(s), s.stars)}<span>${displayName(s)}<small class="stars">${starStr(s.stars)}</small></span></button>`).join('')
+        ${card(s, roleOf(s))}<span>${displayName(s)}<small>総合 ${gradeOf(s)}</small></span></button>`).join('')
       : '<p class="note">送り出せるスタッフがいません。</p>'}</div>
     <div class="actions"><button class="btn ghost" data-action="close">やめる</button>
       <button class="btn" data-action="startBattle" data-store="${st.id}" ${members.length ? '' : 'disabled'}>出撃！</button></div>`);
@@ -427,7 +428,7 @@ function joinFromStore(st, npc, how) {
     return `🙇 ${npc.name}さんは来たがっていましたが、スタッフがいっぱいでした（代わりに ${yen(money)}）`;
   }
   S.staff.push({
-    id: S.nextId++, name: npc.name, g: npc.g, nation: npc.nation, look: npc.look, stars: npc.stars,
+    id: S.nextId++, name: npc.name, g: npc.g, nation: npc.nation, look: npc.look, stats: { ...statsOf(npc) },
     title: npc.title, from: st.name, type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000,
     owner: false, post: 'any', x: L.door.x, y: L.door.y, task: null, boss: npc.bossAce || null,
   });
@@ -436,7 +437,7 @@ function joinFromStore(st, npc, how) {
     S.bossAces = { ...(S.bossAces || {}), [npc.bossAce]: true };
     afterBossProgress(BOSS[npc.bossAce]);
   }
-  return `🤝 ${how}「${st.name}」の${npc.title}・${npc.name}さん（${starStr(npc.stars)}）がアルバイトとして加入しました！`;
+  return `🤝 ${how}「${st.name}」の${npc.title}・${npc.name}さん（総合 ${gradeOf(npc)}）がアルバイトとして加入しました！`;
 }
 
 // ===== 潜入（店長が客のふりをして入り込む）=====
@@ -829,10 +830,11 @@ function npcRow(n, spying, st) {
   const mero = meroLv(n, st), next = meroNext(n, st);
   return `<div class="npc-card ${focus ? 'open' : ''}">
     <div class="row npc">
-      ${card(n, 'customer', n.stars)}
+      ${card(n, 'customer')}
       <div class="info">
         <div class="name">${NATIONS[n.nation].flag} ${n.name}さん ${n.ace ? '<span class="badge ace">エース</span>' : ''}${mero ? `<span class="badge mero lv${mero}">${MERO[mero].icon} ${MERO[mero].label}</span>` : ''}</div>
-        <div class="sub">${n.title}　<span class="stars">${starStr(n.stars)}</span>　理想の高さ ${n.ideal}</div>
+        <div class="sub">${n.title}　総合 ${gradeBadge(n)}　理想の高さ ${n.ideal}</div>
+        ${statsHTML(n)}
         <div class="bar aff"><i style="width:${n.aff}%"></i></div>
         <div class="sub">好感度 ${Math.round(n.aff)}/100</div>
       </div>
@@ -1332,7 +1334,7 @@ function storeCard(st) {
       ${alert > 0 ? `<span class="chip bad">🚨 警戒 ${alert}</span>` : ''}
       ${banned ? `<span class="chip bad">🚫 出禁 あと<span data-until="${st.bannedUntil}"></span></span>` : ''}
     </div>
-    <div class="npc-faces">${st.npcs.map(n => `<div class="face-mini" title="${n.name}">${card(n, 'customer', n.stars)}
+    <div class="npc-faces">${st.npcs.map(n => `<div class="face-mini" title="${n.name}">${card(n, 'customer')}
       <i style="width:${n.aff}%"></i></div>`).join('')}</div>
     ${battle ? `<div class="battle-line">⚔️ 料理勝負中…あと <span data-until="${battle.until}"></span></div>` : ''}
     <div class="store-btns">
@@ -1352,7 +1354,7 @@ function renderTown(el) {
   const now = Date.now();
   const key = ['town', S.town.stores.map(st => [st.id, st.npcs.length, st.npcs.map(n => n.aff).join('/'), st.recipes.join('/'),
     st.bannedUntil > now, st.battleCd > now, Math.round(currentAlert(st) / 5)].join(':')).join(','),
-    S.battles.map(b => b.storeId).join(','), availableForBattle().map(s => s.id + ':' + s.stars).join(','),
+    S.battles.map(b => b.storeId).join(','), availableForBattle().map(s => s.id + ':' + statTotal(s)).join(','),
     charm(), S.recipes.length, S.money >= refreshCost(), S.rank, S.spy ? 1 : 0,
     BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(',')].join('|');
   setKeyed(el, 'town', key, `
