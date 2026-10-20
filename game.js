@@ -193,8 +193,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss, hp, rest, restFull }) =>
-      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, restFull })),
+    staff: S.staff.map(({ id, name, g, nation, look, stars, type, expireAt, owner, post, away, title, from, boss, hp, rest }) =>
+      ({ id, name, g, nation, look, stars, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -283,7 +283,7 @@ function applyOffline(resume = false) {
         S.stoves.forEach(st => { if (st.cook === s.id) st.cook = null; });
         s.hp = 0; s.rest = true;
       } else if (r === 'back') {
-        s.rest = false; s.restFull = false;
+        s.rest = false;
       }
     }
   }
@@ -346,9 +346,8 @@ const hpOf = s => s.owner ? Infinity : Number.isFinite(s.hp) ? s.hp : maxHp(s);
 const onDuty = s => !s.away && !s.rest;
 const drinkPrice = () => 200 * (S.rank + 1);
 const days = sec => (sec / SHIFT_SEC).toFixed(1);
-// 休憩から職場に戻る体力。ふだんは半分、休憩中にドリンクを飲んだら満タンまで休む
-const backAt = s => s.restFull ? maxHp(s) : maxHp(s) / 2;
-const restLeft = s => Math.max(0, (backAt(s) - hpOf(s)) / REST_RATE);
+// 休憩中の人は体力が満タンになると職場に戻る
+const restLeft = s => Math.max(0, (maxHp(s) - hpOf(s)) / REST_RATE);
 
 function exhaust(s) {
   cancelTaskOf(s);
@@ -358,7 +357,6 @@ function exhaust(s) {
 }
 function backToWork(s, msg) {
   s.rest = false;
-  s.restFull = false;
   if (s.inRoom) { s.x = L.rest.x; s.y = L.rest.y; }
   s.inRoom = false;
   if (msg) addLog(msg);
@@ -369,7 +367,7 @@ function tickStamina(s, dt) {
   if (!Number.isFinite(s.hp)) s.hp = maxHp(s);
   if (s.rest) {
     s.hp = Math.min(maxHp(s), s.hp + REST_RATE * dt);
-    if (s.hp >= backAt(s)) return 'back';
+    if (s.hp >= maxHp(s)) return 'back';
   } else {
     s.hp -= dt;
     if (s.hp <= 0) return 'out';
@@ -1112,7 +1110,7 @@ function renderStaff(el) {
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約はレベルアップかショップで手に入ります。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
-    <p class="note"><b>体力</b>：★1つにつき1連勤（1日働ける分）。尽きると💤休憩室で休み、半分戻ると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
+    <p class="note"><b>体力</b>：★1つにつき1連勤（1日働ける分）。尽きると💤休憩室で休み、満タンになると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
         ${card(s, roleOf(s), s.stars)}
@@ -1295,43 +1293,38 @@ function useDrink(id) {
   const s = S.staff.find(x => x.id === id);
   if (!s || s.owner || s.away || !S.drinks || hpOf(s) >= maxHp(s)) return;
   S.drinks--;
-  // ドリンクは体力を回復するだけ。休憩中の人は満タンになるまで職場に戻らない
+  // ドリンクは体力を回復するだけ。休憩中の人は満タンになったら職場に戻る
   s.hp = Math.min(maxHp(s), hpOf(s) + DRINK_SEC);
-  if (s.rest) {
-    s.restFull = true;
-    if (s.hp >= maxHp(s)) backToWork(s, `☕ ${displayName(s)}が体力満タンで職場に戻りました`);
-  }
+  if (s.rest && s.hp >= maxHp(s)) backToWork(s, `☕ ${displayName(s)}が体力満タンで職場に戻りました`);
   toast(`🥤 ${displayName(s)}がエナジードリンクを飲みました（体力 ${days(s.hp)}/${s.stars}日）`);
   afterRestChange();
 }
 function openRestRoom() {
   const list = S.staff.filter(s => s.rest && !s.away);
-  const ownerOut = !!S.staff.find(s => s.owner)?.away;
   restRoomKey = restKey();
   openModal(`<div class="sheet-head"><h2>💤 休憩室</h2>
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
-    <p class="note">体力が尽きたスタッフはここで休み、体力が半分まで戻ると自動で職場に戻ります。
+    <p class="note">体力が尽きたスタッフはここで休み、体力が満タンになると自動で職場に戻ります。
       タップして<b>💪 激励</b>すると体力が1時間分回復して、すぐに働きに戻ります。</p>
-    <p class="note">🥤 エナジードリンク × ${S.drinks || 0}本（1日分回復。飲ませた人は満タンになるまで休みます。ショップで買えます）</p>
-    ${ownerOut ? '<p class="warn">店長が外出中なので激励できません</p>' : ''}
+    <p class="note">🥤 エナジードリンク × ${S.drinks || 0}本（1日分回復。ショップで買えます）</p>
     <div class="staff-list">${list.length ? list.map(s => `
       <div class="row">
         ${card(s, roleOf(s), s.stars)}
         <div class="info"><div class="name">${displayName(s)} <span class="badge ${roleOf(s)}">${s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
           ${hpBar(s)}</div>
         <div class="staff-actions">
-          <button class="btn pink small" data-action="cheer" data-id="${s.id}" ${ownerOut ? 'disabled' : ''}>💪 激励</button>
+          <button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>
           ${drinkButton(s)}
         </div>
       </div>`).join('') : '<p class="note">いま休んでいるスタッフはいません</p>'}</div>
     <div class="actions"><button class="btn ghost" data-action="close">閉じる</button></div>`, 'rest');
 }
 let restRoomKey = '';
-const restKey = () => S.staff.filter(s => s.rest && !s.away).map(s => s.id).join(',') + '|' + S.drinks + !!S.staff.find(s => s.owner)?.away;
+const restKey = () => S.staff.filter(s => s.rest && !s.away).map(s => s.id).join(',') + '|' + S.drinks;
 const CHEER_LINES = ['「もうひと踏ん張り、お願い！」', '「あなたがいないと始まらないの！」', '「終わったらみんなでケーキ食べよう！」'];
 function cheer(id) {
   const s = S.staff.find(x => x.id === id);
-  if (!s || !s.rest || S.staff.find(x => x.owner)?.away) return;
+  if (!s || !s.rest) return;
   s.hp = Math.min(maxHp(s), s.hp + CHEER_SEC);
   backToWork(s);
   toast(`💪 店長：${rand(CHEER_LINES)} ${displayName(s)}が元気に職場へ戻りました`);
@@ -1435,7 +1428,7 @@ function openHelp() {
       <li>スタッフはカウンターの奥の厨房で待機し、右端のスタッフ出入口から客席へ出てカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
-      <li>スタッフには<b>体力</b>があります（★1つにつき1連勤＝1日働ける分。店長は無限）。尽きると奥の<b>💤 休憩室</b>で休み、半分戻ると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復するだけで、休憩中の人は満タンになるまで戻りません。</li>
+      <li>スタッフには<b>体力</b>があります（★1つにつき1連勤＝1日働ける分。店長は無限）。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
