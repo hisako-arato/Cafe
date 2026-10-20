@@ -1256,8 +1256,10 @@ function showToast(text, big) {
   el.className = 'toast' + (big ? ' big' : '');
   el.textContent = text;
   const box = $('toasts');
+  box.style.setProperty('--toast-bottom', $('bottomNav').offsetHeight + 8 + 'px');
+  box.classList.toggle('top', !$('modal').hidden);
   box.appendChild(el);
-  while (box.children.length > 4) box.firstChild.remove();
+  while (box.children.length > 3) box.firstChild.remove();
   setTimeout(() => el.remove(), big ? 3500 : 2600);
 }
 

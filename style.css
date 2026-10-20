@@ -627,8 +627,11 @@ button {
 .profile h2 { margin: 0; }
 .profile p { margin: 2px 0; }
 
+/* お知らせは下部メニューのすぐ上に出す（厨房のタブや画面上部の操作を隠さない）。
+   ポップアップ表示中は暗くなった画面上部に出す */
+#toasts.top { bottom: auto; top: calc(10px + env(safe-area-inset-top)); }
 #toasts {
-  position: fixed; left: 50%; top: calc(96px + env(safe-area-inset-top)); transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: var(--toast-bottom, 84px); transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; align-items: center;
   z-index: 60; pointer-events: none;
   width: min(92vw, 420px);
@@ -645,7 +648,7 @@ button {
   animation: toastIn .25s ease-out;
 }
 .toast.big { background: linear-gradient(#ff9a3d, var(--accent)); font-weight: 900; font-size: 1rem; }
-@keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
 
 .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sheet-head h2 { margin: 0; }
