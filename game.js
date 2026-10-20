@@ -13,6 +13,7 @@ const MAX_TABLES = 12;
 const SHIFT_SEC = 24 * 3600;
 const REST_RATE = 10;        // 休憩中は減る速さの10倍で回復
 const CHEER_SEC = 3600;      // 激励で1時間分回復
+const DRINK_SEC = SHIFT_SEC; // エナジードリンクで1日分回復
 
 // 店舗ランク：上げるとコンロ・テーブル・スタッフ・設備強化の上限が増える
 const RANKS = [
@@ -129,6 +130,7 @@ function newGame() {
     town: null,
     battles: [],
     spy: null,
+    drinks: 0,
   };
 }
 
@@ -342,6 +344,7 @@ const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.0
 const maxHp = s => s.stars * SHIFT_SEC;
 const hpOf = s => s.owner ? Infinity : Number.isFinite(s.hp) ? s.hp : maxHp(s);
 const onDuty = s => !s.away && !s.rest;
+const drinkPrice = () => 200 * (S.rank + 1);
 const days = sec => (sec / SHIFT_SEC).toFixed(1);
 // 休憩から復帰する（体力が半分以上）までの秒数
 const restLeft = s => Math.max(0, (maxHp(s) / 2 - hpOf(s)) / REST_RATE);
@@ -615,6 +618,11 @@ function buy(kind, id) {
     S.money -= p;
     S.decor[d.id] = (S.decor[d.id] || 0) + 1;
     toast(`${d.emoji} ${d.name}を飾りました（人気度 +${d.pop}）`);
+  } else if (kind === 'drink') {
+    if (S.money < drinkPrice()) return;
+    S.money -= drinkPrice();
+    S.drinks = (S.drinks || 0) + 1;
+    toast(`🥤 エナジードリンクを買いました（所持 ${S.drinks}本）`);
   } else if (kind === 'contract') {
     const p = contractPrice();
     if (S.money < p) return;
@@ -1096,13 +1104,13 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), S.contracts, staffCap()].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), S.contracts, staffCap(), S.drinks].join('|');
   setKeyed(el, 'staff', key, `
     <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 永久雇用契約 × ${S.contracts}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約はレベルアップかショップで手に入ります。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
-    <p class="note"><b>体力</b>：★1つにつき1連勤（1日働ける分）。尽きると💤休憩室で休み、半分戻ると職場に戻ります。</p>
+    <p class="note"><b>体力</b>：★1つにつき1連勤（1日働ける分）。尽きると💤休憩室で休み、半分戻ると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
         ${card(s, roleOf(s), s.stars)}
@@ -1122,6 +1130,7 @@ function renderStaff(el) {
             ? `<button class="btn blue small" data-action="promote" data-id="${s.id}" ${S.contracts > 0 ? '' : 'disabled'}>📜 正社員にする</button>`
             : ''}
           ${s.rest && !s.away ? `<button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>` : ''}
+          ${drinkButton(s)}
           ${s.owner ? '' : `<button class="btn ghost small" data-action="askFire" data-id="${s.id}">解雇</button>`}
         </div>
       </div>`).join('')}</div>`);
@@ -1157,7 +1166,7 @@ function renderShop(el) {
     needs.map(r => r.ok + r.now).join(','), next && S.money >= next.cost,
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
     ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
-    S.money >= sp, S.money >= tp, S.money >= cp].join('|');
+    S.money >= sp, S.money >= tp, S.money >= cp, S.drinks, S.money >= drinkPrice()].join('|');
   const r = rankOf();
   setKeyed(el, 'shop', key, `
     <h3>🏪 店舗ランク</h3>
@@ -1192,6 +1201,11 @@ function renderShop(el) {
     <div class="item-list">
       ${DECOR.map(d => itemRow(d.emoji, d.name, `人気度 +${d.pop}　所持 ${S.decor[d.id] || 0}`,
         decorPrice(d), 'buy', `data-kind="decor" data-id="${d.id}"`, S.money < decorPrice(d))).join('')}
+    </div>
+    <h3>体力回復</h3>
+    <div class="item-list">
+      ${itemRow('🥤', 'エナジードリンク', `スタッフの体力を1日分回復（スタッフタブ・休憩室で飲ませる）　所持 ${S.drinks || 0}本`, drinkPrice(), 'buy',
+        'data-kind="drink"', S.money < drinkPrice())}
     </div>
     <h3>契約</h3>
     <div class="item-list">
@@ -1271,6 +1285,19 @@ function hpBar(s) {
   return `<div class="bar hp ${r < 0.2 ? 'low' : ''}" data-hp="${s.id}"><i style="width:${(r * 100).toFixed(1)}%"></i></div>
     <div class="sub">体力 ${days(hpOf(s))}/${s.stars}日${s.rest ? `　復帰まで ${fmtTime(restLeft(s))}` : ''}</div>`;
 }
+function drinkButton(s) {
+  if (s.owner || s.away || !S.drinks || hpOf(s) >= maxHp(s)) return '';
+  return `<button class="btn ghost small" data-action="drink" data-id="${s.id}">🥤 飲ませる</button>`;
+}
+function useDrink(id) {
+  const s = S.staff.find(x => x.id === id);
+  if (!s || s.owner || s.away || !S.drinks || hpOf(s) >= maxHp(s)) return;
+  S.drinks--;
+  s.hp = Math.min(maxHp(s), hpOf(s) + DRINK_SEC);
+  if (s.rest && s.hp >= maxHp(s) / 2) backToWork(s);
+  toast(`🥤 ${displayName(s)}がエナジードリンクを飲みました（体力 ${days(s.hp)}/${s.stars}日）`);
+  afterRestChange();
+}
 function openRestRoom() {
   const list = S.staff.filter(s => s.rest && !s.away);
   const ownerOut = !!S.staff.find(s => s.owner)?.away;
@@ -1279,6 +1306,7 @@ function openRestRoom() {
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
     <p class="note">体力が尽きたスタッフはここで休み、体力が半分まで戻ると自動で職場に戻ります。
       タップして<b>💪 激励</b>すると体力が1時間分回復して、すぐに働きに戻ります。</p>
+    <p class="note">🥤 エナジードリンク × ${S.drinks || 0}本（1日分回復。ショップで買えます）</p>
     ${ownerOut ? '<p class="warn">店長が外出中なので激励できません</p>' : ''}
     <div class="staff-list">${list.length ? list.map(s => `
       <div class="row">
@@ -1287,12 +1315,13 @@ function openRestRoom() {
           ${hpBar(s)}</div>
         <div class="staff-actions">
           <button class="btn pink small" data-action="cheer" data-id="${s.id}" ${ownerOut ? 'disabled' : ''}>💪 激励</button>
+          ${drinkButton(s)}
         </div>
       </div>`).join('') : '<p class="note">いま休んでいるスタッフはいません</p>'}</div>
     <div class="actions"><button class="btn ghost" data-action="close">閉じる</button></div>`, 'rest');
 }
 let restRoomKey = '';
-const restKey = () => S.staff.filter(s => s.rest && !s.away).map(s => s.id).join(',') + '|' + !!S.staff.find(s => s.owner)?.away;
+const restKey = () => S.staff.filter(s => s.rest && !s.away).map(s => s.id).join(',') + '|' + S.drinks + !!S.staff.find(s => s.owner)?.away;
 const CHEER_LINES = ['「もうひと踏ん張り、お願い！」', '「あなたがいないと始まらないの！」', '「終わったらみんなでケーキ食べよう！」'];
 function cheer(id) {
   const s = S.staff.find(x => x.id === id);
@@ -1400,7 +1429,7 @@ function openHelp() {
       <li>スタッフはカウンターの奥の厨房で待機し、右端のスタッフ出入口から客席へ出てカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
-      <li>スタッフには<b>体力</b>があります（★1つにつき1連勤＝1日働ける分。店長は無限）。尽きると奥の<b>💤 休憩室</b>で休み、半分戻ると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。</li>
+      <li>スタッフには<b>体力</b>があります（★1つにつき1連勤＝1日働ける分。店長は無限）。尽きると奥の<b>💤 休憩室</b>で休み、半分戻ると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>を飲ませると1日分回復します。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
@@ -1494,6 +1523,7 @@ document.addEventListener('click', e => {
     case 'reset': resetGame(); break;
     case 'restRoom': openRestRoom(); break;
     case 'cheer': cheer(+d.id); break;
+    case 'drink': useDrink(+d.id); break;
     case 'help': openHelp(); break;
     case 'close': closeModal(); break;
     default: townAction(d);
