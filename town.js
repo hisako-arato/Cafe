@@ -321,7 +321,7 @@ function openDispatch(storeId) {
   const type = storeType(st);
   openModal(`<div class="sheet-head"><h2>⚔️ 料理勝負：${st.name}</h2>
       <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
-    <p class="note">${type.emoji} ${type.type}（格 ${gradeLabel(st.g)}）に、スタッフを最大3人送り出します。勝負には ${fmtTime(battleSec(st))} かかり、その間は店で働けません。出撃すると体力を1勤分使い、休憩中の人は送り出せません。</p>
+    <p class="note">${type.emoji} ${type.type}（格 ${gradeLabel(st.g)}）に、スタッフを最大3人送り出します。勝負には ${fmtTime(battleSec(st))} かかり、その間は店で働けません。休憩中の人は送り出せません。</p>
     <div class="power-line">
       <span>チーム力 <b>${teamPower(members).toFixed(1)}</b></span>
       <span>相手 <b>${storePower(st).toFixed(1)}</b></span>
@@ -346,8 +346,7 @@ function startBattle(storeId) {
   const st = storeById(storeId);
   const members = availableForBattle().filter(s => dispatchSel.includes(s.id));
   if (!st || !members.length || st.battleCd > Date.now() || S.battles.some(b => b.storeId === st.id)) return;
-  // 料理勝負は体力を1勤分使う
-  for (const s of members) { cancelTaskOf(s); s.away = 'battle'; s.walkOut = true; s.hp = Math.max(0, hpOf(s) - SHIFT_SEC); }
+  for (const s of members) { cancelTaskOf(s); s.away = 'battle'; s.walkOut = true; }
   S.battles.push({ storeId: st.id, members: members.map(s => s.id), chance: winChance(members, st),
     until: Date.now() + battleSec(st) * 1000 });
   addLog(`⚔️ ${members.map(displayName).join('・')}が「${st.name}」へ料理勝負に出かけました`);
