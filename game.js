@@ -1063,8 +1063,11 @@ function renderHud() {
   $('pop').textContent = popularity();
   $('rankName').textContent = rankOf().icon + ' ' + rankOf().name;
   const ready = S.stoves.some((_, i) => stoveInfo(i).kind === 'ready');
-  $('kitchenDot').hidden = !ready;
+  const rankReady = canRankUp();
+  $('kitchenDot').hidden = !ready && !rankReady;
   $('cookDot').hidden = !ready;
+  $('rankDot').hidden = !rankReady;
+  $('rankName').classList.toggle('ready', rankReady);
 }
 
 function renderCook(el) {
@@ -1173,28 +1176,12 @@ function itemRow(ico, name, sub, price, action, extra, disabled, label) {
 function renderShop(el) {
   const sp = stovePrice(), tp = tablePrice(), cp = contractPrice();
   const stoveMax = S.stoves.length >= stoveCap(), tableMax = S.tableCount >= tableCap();
-  const next = RANKS[S.rank + 1];
-  const needs = rankNeeds();
-  const canRank = !!next && needs.every(r => r.ok);
-  const key = [S.rank, sp, tp, cp, stoveMax, tableMax, S.up.stove, S.up.table,
-    needs.map(r => r.ok + r.now).join(','), next && S.money >= next.cost,
+  const key = [sp, tp, cp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(),
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
     ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
     S.money >= sp, S.money >= tp, S.money >= cp, S.drinks, S.money >= drinkPrice()].join('|');
-  const r = rankOf();
+  const next = RANKS[S.rank + 1];
   setKeyed(el, 'shop', key, `
-    <h3>🏪 店舗ランク</h3>
-    <div class="rank-card">
-      <div class="rank-now"><span class="rank-icon">${r.icon}</span><div><small>ランク${S.rank + 1}</small><b>${r.name}</b>
-        <div class="sub">コンロ ${r.stoves}台・テーブル ${r.tables}卓・スタッフ ${r.staff}人・強化 Lv${upMax()} まで</div></div></div>
-      ${next ? `
-        <div class="rank-next">次のランク：${next.icon} <b>${next.name}</b>
-          <div class="sub">コンロ ${next.stoves}台・テーブル ${next.tables}卓・スタッフ ${next.staff}人・強化 Lv${Math.min(6, S.rank + 2)} まで</div></div>
-        <ul class="needs">${needs.map(n => `<li class="${n.ok ? 'ok' : ''}">${n.ok ? '✅' : '⬜'} ${n.label}<span>いま ${n.now}</span></li>`).join('')}</ul>
-        <button class="btn wide" data-action="rankup" ${canRank && S.money >= next.cost ? '' : 'disabled'}>
-          ${canRank ? `${yen(next.cost)} でランクアップ` : '条件を満たすとランクアップできます'}</button>`
-      : '<p class="note">最高ランクです！</p>'}
-    </div>
     <h3>設備</h3>
     <div class="item-list">
       ${itemRow('🔥', 'コンロを増やす', `いま ${S.stoves.length}/${stoveCap()} 台`, sp, 'buy', 'data-kind="stove"',
@@ -1229,15 +1216,54 @@ function renderShop(el) {
 `);
 }
 
-function renderSettings() {
-  const el = $('settings');
+// 店舗ランク（お店のいちばんの目標なので、ショップとは別のタブ）
+const canRankUp = () => { const next = RANKS[S.rank + 1]; return !!next && rankNeeds().every(r => r.ok) && S.money >= next.cost; };
+function renderRank(el) {
+  const next = RANKS[S.rank + 1];
+  const needs = rankNeeds();
+  const canRank = !!next && needs.every(r => r.ok);
+  const key = [S.rank, needs.map(r => r.ok + r.now).join(','), next && S.money >= next.cost].join('|');
+  const r = rankOf();
+  setKeyed(el, 'rank', key, `
+    <h3>🏆 店舗ランク</h3>
+    <p class="note">条件とお金がそろったらランクアップ。コンロ・テーブル・スタッフ・設備強化の上限が増え、街にも格の高い店が現れます。</p>
+    <div class="rank-card">
+      <div class="rank-now"><span class="rank-icon">${r.icon}</span><div><small>ランク${S.rank + 1}</small><b>${r.name}</b>
+        <div class="sub">コンロ ${r.stoves}台・テーブル ${r.tables}卓・スタッフ ${r.staff}人・強化 Lv${upMax()} まで</div></div></div>
+      ${next ? `
+        <div class="rank-next">次のランク：${next.icon} <b>${next.name}</b>
+          <div class="sub">コンロ ${next.stoves}台・テーブル ${next.tables}卓・スタッフ ${next.staff}人・強化 Lv${Math.min(6, S.rank + 2)} まで</div></div>
+        <ul class="needs">${needs.map(n => `<li class="${n.ok ? 'ok' : ''}">${n.ok ? '✅' : '⬜'} ${n.label}<span>いま ${n.now}</span></li>`).join('')}</ul>
+        <button class="btn wide" data-action="rankup" ${canRank && S.money >= next.cost ? '' : 'disabled'}>
+          ${canRank ? `${yen(next.cost)} でランクアップ` : '条件を満たすとランクアップできます'}</button>`
+      : '<p class="note">最高ランクです！</p>'}
+    </div>
+    <h3>ランク一覧</h3>
+    <div class="item-list">${RANKS.map((k, i) => `<div class="row ${i === S.rank ? 'on' : ''}">
+      <div class="ico">${k.icon}</div>
+      <div class="info"><div class="name">ランク${i + 1}　${k.name}${i === S.rank ? ' <span class="badge owner">いまここ</span>' : ''}</div>
+        <div class="sub">コンロ ${k.stoves}・テーブル ${k.tables}・スタッフ ${k.staff}${k.cost ? `　${yen(k.cost)}` : ''}</div></div></div>`).join('')}</div>`);
+}
+
+// 店長（自分のこと）：ステータス・身支度・記録・設定
+function renderOwner() {
+  const el = $('owner');
   const st = S.stats;
-  const key = [S.rank, S.level, st.served, st.hired, st.promoted, S.staff.length, S.money].join('|');
-  setKeyed(el, 'settings', key, `
-    <h3>⚙️ 設定</h3>
+  const key = [S.rank, S.level, st.served, st.hired, st.promoted, S.staff.length, S.money, charm(), blend(null),
+    JSON.stringify(S.wardrobe), S.recipes.length, st.battlesWon, st.poached].join('|');
+  setKeyed(el, 'owner', key, `
+    <div class="protag-card">
+      <div class="protag-fig ${USE_STAND ? 'stand' : ''}">${protagFigure(S.wardrobe.eq, USE_STAND)}</div>
+      <div class="info">
+        <div class="name">店長 <small>22歳</small></div>
+        <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(null)}</b></div>
+        ${setLine()}
+        <div class="sub">体力 ∞</div>
+      </div>
+    </div>
+    <p class="note"><b>魅力</b>は店員を口説く成功率（格下の店ではメロメロにも）、<b>馴染み</b>は潜入で失敗したときの警戒の増えにくさに効きます。</p>
     <div class="item-list">
-      ${itemRow('❓', '遊び方', 'ゲームのルールを確認します', 0, 'help', '', false, '見る')}
-      ${itemRow('🗑️', 'データを消去', 'お金・スタッフ・設備をすべて最初に戻します', 0, 'askReset', '', false, '消去')}
+      ${itemRow('👗', '身支度・美容院', '服・頭・顔・小物の着せ替えと、髪型・髪色の変更', 0, 'closet', '', false, '開く')}
     </div>
     <h3>📊 お店の記録</h3>
     <div class="stat-grid">
@@ -1248,6 +1274,14 @@ function renderSettings() {
       <div>スタッフ<b>${S.staff.length}/${staffCap()}人</b></div>
       <div>スカウトした人数<b>${st.hired}人</b></div>
       <div>正社員にした人数<b>${st.promoted}人</b></div>
+      <div>引き抜いたレシピ<b>${S.recipes.length}種</b></div>
+      <div>料理勝負の勝利<b>${st.battlesWon || 0}回</b></div>
+      <div>引き抜いた店員<b>${st.poached || 0}人</b></div>
+    </div>
+    <h3>⚙️ 設定</h3>
+    <div class="item-list">
+      ${itemRow('❓', '遊び方', 'ゲームのルールを確認します', 0, 'help', '', false, '見る')}
+      ${itemRow('🗑️', 'データを消去', 'お金・スタッフ・設備をすべて最初に戻します', 0, 'askReset', '', false, '消去')}
     </div>
     <p class="note">データはこの端末のブラウザに自動で保存されます。</p>`);
 }
@@ -1259,15 +1293,15 @@ function renderUI() {
     if (restKey() !== restRoomKey) { openRestRoom(); $('sheet').scrollTop = top; }
     updateHpBars($('sheet'));
   }
-  if (currentScreen === 'kitchen') ({ cook: renderCook, staff: renderStaff, shop: renderShop })[kitchenTab]($('kitchen'));
-  if (currentScreen === 'settings') renderSettings();
+  if (currentScreen === 'kitchen') ({ cook: renderCook, staff: renderStaff, shop: renderShop, rank: renderRank })[kitchenTab]($('kitchen'));
+  if (currentScreen === 'owner') renderOwner();
   if (currentScreen === 'town') { renderTown($('town')); updateTimers($('town')); }
 }
 
 function setKitchenTab(tab) {
   kitchenTab = tab;
   document.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.ktab === tab));
-  keys.cook = keys.staff = keys.shop = undefined;
+  keys.cook = keys.staff = keys.shop = keys.rank = undefined;
   renderUI();
 }
 
@@ -1477,7 +1511,7 @@ function openHelp() {
   openModal(`
     <h2>☕ 永久雇用カフェの遊び方</h2>
     <ul>
-      <li>下の<b>🍳 厨房</b>でコンロをタップして料理を注文します。手の空いた<b>スタッフがコンロに入って調理</b>します。できあがったらタップしてカウンターへ並べます。</li>
+      <li>下の<b>🏪 お店</b>の「調理」（または店内のコンロ）をタップして料理を注文します。手の空いた<b>スタッフがコンロに入って調理</b>します。できあがったらタップしてカウンターへ並べます。</li>
       <li>スタッフはカウンターの奥の厨房で待機し、右端のスタッフ出入口から客席へ出てカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
@@ -1485,14 +1519,14 @@ function openHelp() {
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。契約書はレベルアップかショップで手に入ります。</li>
-      <li><b>🍳 厨房</b>はメニュー画面です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
+      <li>下のメニューは「<b>☕ カフェ</b>（店内の様子）／<b>🏪 お店</b>（調理・スタッフ・ショップ・店舗ランク）／<b>👩‍🍳 店長</b>（ステータス・身支度・記録・設定）／<b>🗺️ 街</b>（ライバル店）」です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
       <li><b>🗺️ 街</b>では<b>引き抜き作戦</b>ができます。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
       <li>条件を満たすと街に<b>👑 名店（ボス）</b>が現れます。料理勝負で勝つと<b>限定アイテム</b>、潜入や勝負で<b>固有レシピ</b>、口説き落とすと専用の制服を着た<b>エース</b>が手に入ります。3つそろえると制覇です。</li>
       <li>潜入中は客席を自分で歩けます。店員はカウンターの向こうの厨房にいます。床をタップで移動、席に座って注文、カウンターの切れ目のスイングドアの前でのぞく、店員をタップするとカウンター越しに話せます。黄色い扇形は店員の視線。厨房の前にいるところや、うろうろしているところを見られると警戒が上がります。物陰（🪴🗂️🧥）に隠れると見つからず、警戒が下がります。</li>
       <li>うまくいかないときは店員の「💰 買収」。お金で好感度を上げる（心付け）、警戒を下げる（口止め料）、レシピを買う、すぐに引き抜く（引き抜き料）ができます。</li>
       <li>魅力が高いと、格下の店の店員は店長に<b>メロメロ</b>になります（💓ドキドキ→😍メロメロ→💘イチコロ）。イチコロなら魅力だけでその場でスカウトできます。</li>
-      <li>「👗 身支度」で着替えると<b>魅力</b>（口説く成功率）と<b>馴染み</b>（警戒されにくさ）が変わります。お店のドレスコードに合う服だと馴染みやすくなります。</li>
-      <li>条件を満たしたら「ショップ」で<b>🏪 店舗ランク</b>を上げましょう。屋台から始まり、ランクが上がるほどコンロ・テーブル・スタッフ・設備強化の上限が増えます。データは自動で保存されます。</li>
+      <li>「👩‍🍳 店長」の「👗 身支度」で着替えると<b>魅力</b>（口説く成功率）と<b>馴染み</b>（警戒されにくさ）が変わります。お店のドレスコードに合う服だと馴染みやすくなります。</li>
+      <li>条件を満たしたら「お店」の<b>🏆 店舗ランク</b>でランクを上げましょう（上の店舗ランクの表示をタップしても開けます）。屋台から始まり、ランクが上がるほどコンロ・テーブル・スタッフ・設備強化の上限が増えます。データは自動で保存されます。</li>
     </ul>
     <div class="actions"><button class="btn" data-action="close">はじめる</button></div>`);
 }
@@ -1555,6 +1589,7 @@ document.addEventListener('click', e => {
     case 'promote': promote(+d.id); break;
     case 'post': setPost(+d.id, d.post); break;
     case 'rankup': rankUp(); break;
+    case 'gotoRank': closeModal(); setScreen('kitchen'); setKitchenTab('rank'); break;
     case 'upgrade': upgrade(d.kind); break;
     case 'askFire': {
       const s = S.staff.find(s => s.id === +d.id);

@@ -18,7 +18,7 @@
 <body>
   <div id="app">
     <header id="hud">
-      <div class="title">☕ 永久雇用カフェ <small id="rankName" class="rank-chip"></small></div>
+      <div class="title">☕ 永久雇用カフェ <button id="rankName" class="rank-chip" data-action="gotoRank" aria-label="店舗ランクを見る"></button></div>
       <div class="stats">
         <div class="stat" title="所持金">💰 <b id="money">0</b></div>
         <div class="stat level" title="レベル">
@@ -55,13 +55,14 @@
         </div>
       </section>
 
-      <!-- 厨房画面（メニュー画面：調理・スタッフ・ショップ） -->
+      <!-- お店画面（調理・スタッフ・ショップ・店舗ランク） -->
       <section id="scr-kitchen" class="screen">
         <div class="scroll">
           <nav class="seg">
             <button class="seg-btn active" data-action="ktab" data-ktab="cook">🍳 調理<b class="dot" id="cookDot" hidden></b></button>
             <button class="seg-btn" data-action="ktab" data-ktab="staff">👥 スタッフ</button>
             <button class="seg-btn" data-action="ktab" data-ktab="shop">🛒 ショップ</button>
+            <button class="seg-btn" data-action="ktab" data-ktab="rank">🏆 ランク<b class="dot" id="rankDot" hidden></b></button>
           </nav>
           <div id="kitchen"></div>
         </div>
@@ -73,17 +74,17 @@
         <div id="spyView" class="spy-view" hidden></div>
       </section>
 
-      <!-- 設定画面 -->
-      <section id="scr-settings" class="screen">
-        <div class="scroll" id="settings"></div>
+      <!-- 店長画面（ステータス・身支度・記録・設定） -->
+      <section id="scr-owner" class="screen">
+        <div class="scroll" id="owner"></div>
       </section>
     </main>
 
     <nav id="bottomNav">
       <button class="nav-btn active" data-action="screen" data-screen="cafe"><i>☕</i><span>カフェ</span></button>
-      <button class="nav-btn" data-action="screen" data-screen="kitchen"><i>🍳</i><span>厨房</span><b class="dot" id="kitchenDot" hidden></b></button>
+      <button class="nav-btn" data-action="screen" data-screen="kitchen"><i>🏪</i><span>お店</span><b class="dot" id="kitchenDot" hidden></b></button>
+      <button class="nav-btn" data-action="screen" data-screen="owner"><i>👩‍🍳</i><span>店長</span></button>
       <button class="nav-btn" data-action="screen" data-screen="town"><i>🗺️</i><span>街</span></button>
-      <button class="nav-btn" data-action="screen" data-screen="settings"><i>⚙️</i><span>設定</span></button>
     </nav>
   </div>
 

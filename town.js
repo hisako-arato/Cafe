@@ -415,7 +415,7 @@ function learnRecipe(id, st) {
   const d = DISH[id];
   const b = BOSSES.find(x => x.recipe === id);
   if (b) afterBossProgress(b);
-  return `💡 ${b ? '固有' : ''}レシピ「${d.emoji} ${d.name}」を閃きました！ 厨房で作れます`;
+  return `💡 ${b ? '固有' : ''}レシピ「${d.emoji} ${d.name}」を閃きました！ お店の「調理」で作れます`;
 }
 
 // ライバル店の店員がアルバイトとして加入する
@@ -1356,15 +1356,6 @@ function renderTown(el) {
     charm(), S.recipes.length, S.money >= refreshCost(), S.rank, S.spy ? 1 : 0,
     BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(',')].join('|');
   setKeyed(el, 'town', key, `
-    <div class="protag-card">
-      <div class="protag-fig ${USE_STAND ? 'stand' : ''}">${protagFigure(S.wardrobe.eq, USE_STAND)}</div>
-      <div class="info">
-        <div class="name">店長 <small>22歳</small></div>
-        <div class="closet-stats">💖 魅力 <b>${charm()}</b>　🕶️ 馴染み <b>${blend(null)}</b></div>
-        <div class="sub">📖 引き抜いたレシピ ${S.recipes.length}種　⚔️ 勝利 ${S.stats.battlesWon || 0}回　🤝 引き抜き ${S.stats.poached || 0}人</div>
-        <button class="btn small" data-action="closet">👗 身支度</button>
-      </div>
-    </div>
     ${bossBoard()}
     <h3>🗺️ 引き抜き作戦</h3>
     <p class="note"><b>格下</b>の店には「⚔️ 料理勝負」（スタッフを送り出して勝負）、<b>格上</b>の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としたりしましょう。
