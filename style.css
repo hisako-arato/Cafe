@@ -324,36 +324,46 @@ button {
   background: #b91c1c; color: #fff; border-radius: .5cqw; padding: .1cqw .8cqw;
 }
 
-/* 厨房のコンロ（奥の壁ぎわ） */
-.mini-stoves {
-  position: absolute;
-  left: 56%; top: 12.5cqw; width: 41.5%; height: 10cqw;
+/* 厨房のコンロ（厨房の床に置く。座標は足元＝下端の中央） */
+.stove-unit {
+  position: absolute; transform: translate(-50%, -100%);
+  width: 9cqw; height: 6.5cqw;
   background: linear-gradient(#e5e7eb, #b8bcc4);
-  border: 2px solid #2b1d33;
-  border-radius: 1.4cqw;
-  box-shadow: 0 1cqw 0 rgba(0,0,0,.25);
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: 1fr;
-  gap: .6cqw;
-  padding: .7cqw;
-  z-index: 3;
+  border: 2px solid #2b1d33; border-radius: 1cqw;
+  box-shadow: 0 .6cqw 0 rgba(0,0,0,.25);
+  padding: .5cqw;
+  cursor: pointer;
 }
-.mini-stove {
-  border: 0; border-radius: .8cqw;
-  background: #2f2b36;
-  display: grid; place-items: center;
-  font-size: 2.6cqw;
-  padding: 0;
-  position: relative;
-  overflow: hidden;
+.stove-unit span {
+  display: grid; place-items: center; height: 100%;
+  border-radius: .7cqw; background: #2f2b36; font-size: 2.8cqw;
 }
-.mini-stove.idle { opacity: .85; }
-.mini-stove.cooking { background: #7a2e1a; box-shadow: inset 0 0 1.5cqw #ff6b1a; }
-.mini-stove.waiting span, .mini-stove.cooking span { opacity: .6; }
-.mini-stove.ready { background: #fde047; animation: pulse 1s infinite; }
-.mini-stove .fill { position: absolute; left: 0; bottom: 0; height: 14%; background: #ff8a3d; }
-.mini-stove.waiting .fill { background: #9ca3af; }
+.stove-unit.idle span { opacity: .85; }
+.stove-unit.cooking span { background: #7a2e1a; box-shadow: inset 0 0 1.5cqw #ff6b1a; }
+.stove-unit.ready span { background: #fde047; animation: pulse 1s infinite; }
+.stove-unit .fill { position: absolute; left: .5cqw; bottom: .5cqw; height: .8cqw; width: 0; max-width: calc(100% - 1cqw); background: #ff8a3d; border-radius: .4cqw; }
+.stove-unit.waiting .fill { background: #9ca3af; }
+
+/* 配置の編集 */
+.edit-btn {
+  position: absolute; right: 1.5%; top: 1cqw; z-index: 450;
+  font-size: 2.4cqw; font-weight: 900; color: #fff;
+  background: rgba(43, 29, 51, .7); border: 1.5px solid rgba(255,255,255,.8); border-radius: 99px;
+  padding: .5cqw 1.6cqw;
+}
+.edit-btn[hidden], .edit-bar[hidden] { display: none; }
+.edit-bar {
+  position: absolute; left: 1.5%; right: 1.5%; top: 1cqw; z-index: 600;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: rgba(43, 29, 51, .88); color: #fff; border-radius: 12px; padding: 6px 8px;
+  font-size: .72rem; font-weight: 800;
+}
+.edit-bar span { flex: 1; min-width: 0; }
+#floor.editing { touch-action: none; }
+#floor.editing .customer { pointer-events: none; }
+#floor.editing [data-edit] { pointer-events: auto; cursor: grab; outline: 2px dashed rgba(124, 58, 237, .9); outline-offset: 2px; }
+#floor.editing [data-edit].dragging { cursor: grabbing; outline-color: #22c55e; z-index: 480 !important; }
+#floor.editing [data-edit].bad { outline-color: #ef4444; background-color: rgba(239, 68, 68, .25); }
 
 /* 入口 */
 .door {

@@ -45,9 +45,14 @@
           <div id="counter" class="counter"></div>
           <div id="staffGate" class="staff-gate"><i></i><i></i><b>STAFF</b></div>
           <div class="counter-end"></div>
-          <div id="miniStoves" class="mini-stoves"></div>
           <div id="floorDecor"></div>
           <div class="door"><span class="open-sign">OPEN</span></div>
+          <button id="editBtn" class="edit-btn" data-action="editLayout">🛠 配置</button>
+          <div id="editBar" class="edit-bar" hidden>
+            <span>🛠 配置を編集中：テーブル・コンロ・観葉植物などをドラッグ</span>
+            <button class="btn ghost small" data-action="layoutReset">↺ 最初の配置</button>
+            <button class="btn small" data-action="editDone">✓ 完了</button>
+          </div>
           <div class="log-window">
             <div class="log-title">📢 お店のできごと <span>お客さんをタップでスカウト</span></div>
             <div id="log" class="log"></div>
