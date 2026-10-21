@@ -770,9 +770,19 @@ function setPost(id, post) {
   save();
 }
 
+// 正社員はいきなり解雇できない。アルバイトに降格すると正社員の枠が1つ空く
+function demote(id) {
+  const s = S.staff.find(s => s.id === id);
+  if (!s || s.owner || s.type !== 'perm') return;
+  s.type = 'part';
+  s.expireAt = Date.now() + CONTRACT_SEC * 1000;
+  toast(`⬇ ${displayName(s)}をアルバイトに降格しました（契約${fmtTime(CONTRACT_SEC)}）。正社員の枠が1つ空きました`);
+  closeModal();
+  save();
+}
 function fire(id) {
   const s = S.staff.find(s => s.id === id);
-  if (!s || s.owner) return;
+  if (!s || s.owner || s.type === 'perm') return;
   removeStaff(s, `👋 ${displayName(s)}が退職しました`);
   closeModal();
 }
@@ -1564,7 +1574,7 @@ function renderStaff(el) {
   setKeyed(el, 'staff', key, `
     <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 正社員の枠 ${permCount()}/${permSlots()}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
-    永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数（正社員の枠）は店舗ランクで増えます。正社員を解雇すると枠が1つ空きます。</p>
+    永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数（正社員の枠）は店舗ランクで増えます。正社員をアルバイトに降格すると枠が1つ空きます（正社員はいきなり解雇できません）。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
     <p class="note"><b>能力</b>：💪体力（★1つ＝1日働ける）／🍳調理（調理の速さ）／🏃配膳（歩く・片付けの速さ）／🤝忠誠度（不満が溜まりにくく、休憩からの復帰が速い）。総合評価は4つの合計で C〜SS。<b>体力</b>が尽きると💤休憩室で休み、満タンになると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
     <div class="staff-list">${S.staff.map(s => `
@@ -1590,7 +1600,9 @@ function renderStaff(el) {
             : ''}
           ${s.rest && !s.away ? `<button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>` : ''}
           ${drinkButton(s)}
-          ${s.owner ? '' : `<button class="btn ghost small" data-action="askFire" data-id="${s.id}">解雇</button>`}
+          ${s.owner ? '' : s.type === 'perm'
+            ? `<button class="btn ghost small" data-action="askDemote" data-id="${s.id}">⬇ 降格</button>`
+            : `<button class="btn ghost small" data-action="askFire" data-id="${s.id}">解雇</button>`}
         </div>
       </div>`).join('')}</div>`);
   updateHpBars(el);
@@ -1971,7 +1983,7 @@ function openHelp() {
       <li>スタッフは<b>能力</b>（💪体力・🍳調理・🏃配膳・🤝忠誠度）をそれぞれ★1〜5で持ち、合計から総合評価（C〜SS）が決まります。<b>体力</b>は★1つにつき1日働ける分（店長は無限）。忠誠度が高いほど休憩からの復帰が速く、激励やドリンクへの不満も溜まりにくくなります。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
-      <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数は<b>正社員の枠</b>で決まり、店舗ランクを上げると増えます。正社員を解雇すると枠が1つ空き、また契約できます。</li>
+      <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数は<b>正社員の枠</b>で決まり、店舗ランクを上げると増えます。正社員をアルバイトに降格すると枠が1つ空き、また契約できます（正社員はいきなり解雇できません）。</li>
       <li>下のメニューは「<b>☕ カフェ</b>（店内の様子）／<b>🏪 お店</b>（調理・スタッフ・ショップ・店舗ランク）／<b>👩‍🍳 店長</b>（ステータス・身支度・記録・設定）／<b>🗺️ 街</b>（ライバル店）」です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
       <li><b>🗺️ 街</b>では<b>引き抜き作戦</b>ができます。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
       <li>条件を満たすと街に<b>👑 名店（ボス）</b>が現れます。料理勝負で勝つと<b>限定アイテム</b>、潜入や勝負で<b>固有レシピ</b>、口説き落とすと専用の制服を着た<b>エース</b>が手に入ります。3つそろえると制覇です。</li>
@@ -2052,11 +2064,21 @@ document.addEventListener('click', e => {
     case 'rankup': rankUp(); break;
     case 'gotoRank': closeModal(); setScreen('kitchen'); setKitchenTab('rank'); break;
     case 'upgrade': upgrade(d.kind); break;
+    case 'askDemote': {
+      const s = S.staff.find(s => s.id === +d.id);
+      if (!s || s.type !== 'perm') break;
+      openModal(`<h2>${displayName(s)}をアルバイトに降格しますか？</h2>
+        <p>正社員の枠が1つ空きます。降格すると契約期間（${fmtTime(CONTRACT_SEC)}）のアルバイトになり、期間が過ぎると辞めてしまいます。また正社員に戻すこともできます。</p>
+        <div class="actions"><button class="btn ghost" data-action="close">やめる</button>
+        <button class="btn danger" data-action="demote" data-id="${s.id}">降格する</button></div>`);
+      break;
+    }
+    case 'demote': demote(+d.id); break;
     case 'askFire': {
       const s = S.staff.find(s => s.id === +d.id);
-      if (!s) break;
+      if (!s || s.type === 'perm') break;
       openModal(`<h2>${displayName(s)}を解雇しますか？</h2>
-        <p>${s.type === 'perm' ? '正社員を解雇すると、正社員の枠が1つ空きます。' : 'アルバイトの契約を打ち切ります。'}</p>
+        <p>アルバイトの契約を打ち切ります。</p>
         <div class="actions"><button class="btn ghost" data-action="close">やめる</button>
         <button class="btn danger" data-action="fire" data-id="${s.id}">解雇する</button></div>`);
       break;
