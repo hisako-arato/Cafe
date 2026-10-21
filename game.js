@@ -24,6 +24,21 @@ const RANKS = [
   { name: '人気カフェ',       icon: '🏡', stoves: 5, tables: 8,  staff: 7,  perm: 5, cost: 8000,  need: { level: 10, served: 500,  perm: 4 } },
   { name: '有名店',           icon: '🏛️', stoves: 6, tables: 10, staff: 9,  perm: 7, cost: 25000, need: { level: 15, served: 1200, perm: 5 } },
   { name: '2階席のある名店', icon: '🏰', stoves: 8, tables: 12, staff: 11, perm: 8, cost: 70000, need: { level: 20, served: 3000, perm: 7 } },
+  // 第2章（首都圏）：2号店・3号店を出す。スタッフの上限は店ごと、正社員の枠は会社全体。chapter は前の章の制覇が条件
+  { name: '首都圏デビュー',     icon: '🚃', stoves: 8, tables: 12, staff: 11, perm: 10, shops: 2, cost: 150000,  need: { level: 24, served: 5000,   perm: 8,  chapter: 1 } },
+  { name: 'テレビで話題の店',   icon: '📺', stoves: 8, tables: 12, staff: 11, perm: 12, shops: 2, cost: 300000,  need: { level: 28, served: 8000,   perm: 10 } },
+  { name: '3店舗のチェーン',    icon: '🏬', stoves: 8, tables: 12, staff: 11, perm: 14, shops: 3, cost: 600000,  need: { level: 32, served: 12000,  perm: 12 } },
+  { name: '首都圏の名門',       icon: '🗼', stoves: 8, tables: 12, staff: 11, perm: 16, shops: 3, cost: 1000000, need: { level: 36, served: 18000,  perm: 14 } },
+  // 第3章（アジア）
+  { name: 'アジア進出',         icon: '✈️', stoves: 8, tables: 12, staff: 11, perm: 18, shops: 3, cost: 2000000,  need: { level: 40, served: 25000,  perm: 16, chapter: 2 } },
+  { name: 'アジアの人気店',     icon: '🏮', stoves: 8, tables: 12, staff: 11, perm: 20, shops: 3, cost: 3500000,  need: { level: 44, served: 33000,  perm: 18 } },
+  { name: 'アジアの名門',       icon: '🏯', stoves: 8, tables: 12, staff: 11, perm: 22, shops: 3, cost: 5000000,  need: { level: 48, served: 42000,  perm: 20 } },
+  { name: 'アジアの覇者',       icon: '🐉', stoves: 8, tables: 12, staff: 11, perm: 24, shops: 3, cost: 8000000,  need: { level: 52, served: 52000,  perm: 22 } },
+  // 第4章（世界）
+  { name: '世界進出',           icon: '🌍', stoves: 8, tables: 12, staff: 11, perm: 26, shops: 3, cost: 12000000, need: { level: 56, served: 65000,  perm: 24, chapter: 3 } },
+  { name: '世界の人気店',       icon: '🗽', stoves: 8, tables: 12, staff: 11, perm: 28, shops: 3, cost: 18000000, need: { level: 60, served: 80000,  perm: 26 } },
+  { name: '世界の名門',         icon: '🏆', stoves: 8, tables: 12, staff: 11, perm: 30, shops: 3, cost: 25000000, need: { level: 64, served: 100000, perm: 28 } },
+  { name: '世界一のカフェ',     icon: '🌟', stoves: 8, tables: 12, staff: 11, perm: 32, shops: 3, cost: 40000000, need: { level: 68, served: 125000, perm: 30 } },
 ];
 
 // 設備強化（上限は店舗ランク + 1、最大 Lv6）
@@ -77,6 +92,24 @@ const DISHES = [
   { id: 'omakase',     name: '大将のおまかせ握り',       emoji: '🎏', time: 150, cost: 260, servings: 10, price: 210, xp: 34, secret: true, boss: true },
   { id: 'souffle',     name: '幻のスフレ',               emoji: '🌠', time: 120, cost: 220, servings: 12, price: 190, xp: 32, secret: true, boss: true },
   { id: 'grandcourse', name: '太陽のグランコース',       emoji: '🌞', time: 300, cost: 700, servings: 10, price: 520, xp: 70, secret: true, boss: true },
+  // 首都圏の名店
+  { id: 'anmitsu',   name: '秘伝の黒蜜あんみつ',   emoji: '🍡', time: 40,  cost: 90,   servings: 14, price: 140,  xp: 20,  secret: true, boss: true },
+  { id: 'xiaolong',  name: '黄金の小籠包',         emoji: '🥟', time: 70,  cost: 180,  servings: 16, price: 210,  xp: 30,  secret: true, boss: true },
+  { id: 'pancake',   name: '天空のスフレパンケーキ', emoji: '🥞', time: 100, cost: 260, servings: 14, price: 300,  xp: 42,  secret: true, boss: true },
+  { id: 'kaisendon', name: '築地の極上海鮮丼',     emoji: '🐟', time: 150, cost: 420, servings: 12, price: 480,  xp: 60,  secret: true, boss: true },
+  { id: 'tsukikage', name: '月影のフルコース',     emoji: '🌙', time: 300, cost: 900, servings: 12, price: 900,  xp: 110, secret: true, boss: true },
+  // アジアの名店
+  { id: 'luroufan',  name: '夜市の魯肉飯',         emoji: '🏮', time: 50,  cost: 160,  servings: 18, price: 260,  xp: 36,  secret: true, boss: true },
+  { id: 'tomyum',    name: '至高のトムヤムクン',   emoji: '🍜', time: 90,  cost: 300,  servings: 16, price: 400,  xp: 52,  secret: true, boss: true },
+  { id: 'hanjeong',  name: '王宮の韓定食',         emoji: '🍚', time: 140, cost: 520,  servings: 14, price: 640,  xp: 78,  secret: true, boss: true },
+  { id: 'chilicrab', name: '天空のチリクラブ',     emoji: '🦀', time: 200, cost: 800,  servings: 12, price: 980,  xp: 110, secret: true, boss: true },
+  { id: 'peking',    name: '翡翠の北京ダック',     emoji: '🦆', time: 300, cost: 1500, servings: 12, price: 1600, xp: 170, secret: true, boss: true },
+  // 世界の名店
+  { id: 'teaset',    name: '女王のアフタヌーンティー', emoji: '🫖', time: 60,  cost: 300,  servings: 18, price: 480,  xp: 60,  secret: true, boss: true },
+  { id: 'nyburger',  name: '摩天楼バーガー',       emoji: '🗽', time: 90,  cost: 520,  servings: 16, price: 720,  xp: 84,  secret: true, boss: true },
+  { id: 'carbonara', name: '皇帝のカルボナーラ',   emoji: '🏛️', time: 140, cost: 800,  servings: 14, price: 1100, xp: 120, secret: true, boss: true },
+  { id: 'sacher',    name: '宮廷のザッハトルテ',   emoji: '🎻', time: 200, cost: 1200, servings: 14, price: 1600, xp: 170, secret: true, boss: true },
+  { id: 'parisfull', name: '花の都のグランコース', emoji: '🗼', time: 300, cost: 2600, servings: 12, price: 2900, xp: 260, secret: true, boss: true },
 ];
 // 長時間料理（仕込み設備で作る）。量で稼ぐので1人前は安め
 DISHES.push(
@@ -109,7 +142,45 @@ const NATIONS = {
   pl: { flag: '🇵🇱', name: 'ポーランド',
     m: ['ヤクプ', 'カツペル', 'フィリプ', 'シモン', 'ミコワイ', 'アントニ', 'ヴォイチェフ'],
     f: ['ズザンナ', 'ユリア', 'ゾフィア', 'マヤ', 'アレクサンドラ', 'アガタ', 'オリヴィア'] },
+  // 第2章（首都圏）から
+  jp: { flag: '🇯🇵', name: '日本', ch: 2,
+    m: ['ハルト', 'ソウタ', 'ユウマ', 'レン', 'ミナト', 'イツキ', 'カイト'],
+    f: ['ヒナ', 'サクラ', 'ユイ', 'アオイ', 'ミオ', 'リン', 'コハル'] },
+  // 第3章（アジア）から
+  cn: { flag: '🇨🇳', name: '中国', ch: 3,
+    m: ['ハオラン', 'ズーシュエン', 'ユーチェン', 'ジュンジエ', 'ウェイ', 'ミン'],
+    f: ['シンイー', 'ユートン', 'メイリン', 'シャオフェイ', 'リーナ', 'チュンホア'] },
+  kr: { flag: '🇰🇷', name: '韓国', ch: 3,
+    m: ['ミンジュン', 'ソジュン', 'ドユン', 'ハジュン', 'ジホ', 'ウジン'],
+    f: ['ソヨン', 'ジウ', 'ハユン', 'スア', 'ミンソ', 'イェジン'] },
+  th: { flag: '🇹🇭', name: 'タイ', ch: 3,
+    m: ['ソムチャイ', 'アナン', 'クリット', 'ナット', 'ポン', 'タナワット'],
+    f: ['ナリン', 'プロイ', 'マリ', 'パン', 'ダオ', 'ノーイ'] },
+  vn: { flag: '🇻🇳', name: 'ベトナム', ch: 3,
+    m: ['ミン', 'フン', 'ドゥック', 'ナム', 'クアン', 'タン'],
+    f: ['リン', 'マイ', 'ラン', 'フオン', 'トゥイ', 'ハー'] },
+  in: { flag: '🇮🇳', name: 'インド', ch: 3,
+    m: ['アルジュン', 'ラジ', 'ヴィハーン', 'アディティヤ', 'ローハン', 'カビール'],
+    f: ['プリヤ', 'アナヤ', 'ディヤ', 'イシャ', 'カヴィヤ', 'ミーラ'] },
+  // 第4章（世界）から
+  fr: { flag: '🇫🇷', name: 'フランス', ch: 4,
+    m: ['アンリ', 'ルイ', 'ガブリエル', 'ラファエル', 'ジュール', 'アルチュール'],
+    f: ['エマ', 'ジャンヌ', 'ルイーズ', 'カミーユ', 'マノン', 'クロエ'] },
+  es: { flag: '🇪🇸', name: 'スペイン', ch: 4,
+    m: ['ウーゴ', 'マテオ', 'パブロ', 'アレハンドロ', 'ハビエル', 'ディエゴ'],
+    f: ['ルシア', 'カルメン', 'パウラ', 'イネス', 'マルタ', 'エレナ'] },
+  us: { flag: '🇺🇸', name: 'アメリカ', ch: 4,
+    m: ['マイケル', 'ジェイコブ', 'イーサン', 'ノア', 'ルーカス', 'メイソン'],
+    f: ['エミリー', 'マディソン', 'アヴァ', 'ハーパー', 'エイヴリー', 'ケイティ'] },
+  br: { flag: '🇧🇷', name: 'ブラジル', ch: 4,
+    m: ['ミゲル', 'アーサー', 'ベルナルド', 'ダヴィ', 'ガブリエウ', 'エンゾ'],
+    f: ['アリシア', 'ヘレナ', 'ラウラ', 'ヴァレンチナ', 'ベアトリス', 'マヌエラ'] },
+  tr: { flag: '🇹🇷', name: 'トルコ', ch: 4,
+    m: ['ユスフ', 'エミル', 'オメル', 'ミラチ', 'アリ', 'ケレム'],
+    f: ['ゼイネプ', 'エリフ', 'デフネ', 'アスヤ', 'メリス', 'エイリュル'] },
 };
+// 解放した章までの国籍（野良のお客さんに出てくる）
+const nationsOpen = () => Object.keys(NATIONS).filter(k => (NATIONS[k].ch || 1) <= (typeof chapterReached === 'function' ? chapterReached() : 1));
 
 // 床の座標はすべて % 単位（人物は足元の位置）。
 // 縦方向は床の縦横比で変わるので、レイアウトは computeLayout() で計算する。
@@ -261,6 +332,7 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
+    town: undefined,   // いま見ている地域の街（S.towns の中を指しているだけ）
     staff: S.staff.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse, fpost }) =>
       ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse, fpost })),
   };
@@ -391,7 +463,8 @@ function initRuntime() {
 }
 
 // ===== 計算 =====
-const popularity = () => DECOR.reduce((sum, d) => sum + (S.decor[d.id] || 0) * d.pop, 0);
+// 名店の証（第2章以降の名店に勝つと手に入る）1つにつき人気度 +5
+const popularity = () => DECOR.reduce((sum, d) => sum + (S.decor[d.id] || 0) * d.pop, 0) + (S.trophies || []).length * 5;
 const rankOf = () => RANKS[S.rank];
 const staffCap = () => rankOf().staff;
 const stoveCap = () => rankOf().stoves;
@@ -411,6 +484,8 @@ const stovePrice = () => Math.round(150 * Math.pow(2, normalStoves() - 2));
 const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const permSlots = () => rankOf().perm;
+// すべての店のスタッフ（2号店・3号店を含む）
+const allStaff = () => [...S.staff, ...(S.branches || []).flatMap(b => b.staff)];
 // 施設：ランクの条件を満たし、まだ上限まで作っていないか
 const facMax = f => f.max ? f.max(S.rank) : 1;
 const facAvailable = f => S.rank >= f.rank && facCount(f.id) < facMax(f);
@@ -651,8 +726,8 @@ function rollAvg() {
   if (r < 0.95) return 2;
   return 3;
 }
-function randomPerson() {
-  const nation = rand(Object.keys(NATIONS));
+function randomPerson(pool) {
+  const nation = rand(pool && pool.length ? pool : nationsOpen());
   const g = Math.random() < 0.5 ? 'm' : 'f';
   return { nation, g, name: rand(NATIONS[nation][g]), look: Chara.randomLook(g) };
 }
@@ -794,6 +869,8 @@ function rankNeeds() {
   if (!next) return [];
   const n = next.need;
   return [
+    ...(n.chapter ? [{ label: `第${n.chapter}章（${REGIONS[n.chapter - 1].name}）の名店5軒を制覇`, ok: chapterCleared(n.chapter),
+      now: `${REGIONS[n.chapter - 1].bosses().filter(bossCleared).length}軒` }] : []),
     { label: `店長レベル ${n.level} 以上`, ok: S.level >= n.level, now: `Lv${S.level}` },
     { label: `接客 ${n.served.toLocaleString('ja-JP')}人`, ok: S.stats.served >= n.served, now: `${S.stats.served.toLocaleString('ja-JP')}人` },
     { label: `正社員 ${n.perm}人`, ok: permCount() >= n.perm, now: `${permCount()}人` },
@@ -806,7 +883,9 @@ function rankUp() {
   S.money -= next.cost;
   S.rank++;
   toast(`${next.icon} お店が「${next.name}」にランクアップしました！`, true);
-  toast(`コンロ ${next.stoves}台・テーブル ${next.tables}卓・スタッフ ${next.staff}人・強化 Lv${upMax()} まで広げられます`);
+  toast(`コンロ ${next.stoves}台・テーブル ${next.tables}卓・スタッフ ${next.staff}人・正社員の枠 ${next.perm}${next.shops ? `・お店 ${next.shops}軒` : ''}まで広げられます`);
+  computeLayout();
+  checkChapter();
   save();
 }
 
@@ -1970,7 +2049,7 @@ function openDishPicker(i) {
       </div>`;
     }).join('')}
     ${DISHES.some(d => d.secret && !canCook(d)) ? `<div class="row locked"><div class="ico">❓</div><div class="info"><div class="name">？？？</div>
-      <div class="sub">あと ${DISHES.filter(d => d.secret && !canCook(d)).length} 種類のレシピが、🗺️ 街のお店に眠っています</div></div></div>` : ''}</div>
+      <div class="sub">あと ${DISHES.filter(d => d.secret && !canCook(d)).length} 種類のレシピが、🗺️ 地図のお店に眠っています</div></div></div>` : ''}</div>
     <div class="actions"><button class="btn ghost" data-action="close">閉じる</button></div>`);
 }
 
@@ -2015,8 +2094,8 @@ function openHelp() {
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
       <li><b>📜 永久雇用契約</b>を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数は<b>正社員の枠</b>で決まり、店舗ランクを上げると増えます。正社員をアルバイトに降格すると枠が1つ空き、また契約できます（正社員はいきなり解雇できません）。</li>
-      <li>下のメニューは「<b>☕ カフェ</b>（店内の様子）／<b>🏪 お店</b>（調理・スタッフ・ショップ・店舗ランク）／<b>👩‍🍳 店長</b>（ステータス・身支度・記録・設定）／<b>🗺️ 街</b>（ライバル店）」です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
-      <li><b>🗺️ 街</b>では<b>引き抜き作戦</b>ができます。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
+      <li>下のメニューは「<b>☕ カフェ</b>（店内の様子）／<b>🏪 お店</b>（調理・スタッフ・ショップ・店舗ランク）／<b>👩‍🍳 店長</b>（ステータス・身支度・記録・設定）／<b>🗺️ 地図</b>（ライバル店）」です。「スタッフ」で契約や持ち場、「ショップ」で<b>コンロ・テーブル・設備強化・内装</b>を買えます。</li>
+      <li><b>🗺️ 地図</b>では<b>引き抜き作戦</b>ができます。章をクリアすると、街 → 首都圏 → アジア → 世界と地域が増え、先の地域ほど店が強く、報酬と買収の値段も高くなります。格下の店には「⚔️ 料理勝負」でスタッフを送り出し、格上の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としてアルバイトにしたりできます。失敗が続くと警戒ゲージが溜まり、満タンで追い出されます。</li>
       <li>条件を満たすと街に<b>👑 名店（ボス）</b>が現れます。料理勝負で勝つと<b>限定アイテム</b>、潜入や勝負で<b>固有レシピ</b>、口説き落とすと専用の制服を着た<b>エース</b>が手に入ります。3つそろえると制覇です。</li>
       <li>潜入中は客席を自分で歩けます。店員はカウンターの向こうの厨房にいます。床をタップで移動、席に座って注文、カウンターの切れ目のスイングドアの前でのぞく、店員をタップするとカウンター越しに話せます。黄色い扇形は店員の視線。厨房の前にいるところや、うろうろしているところを見られると警戒が上がります。物陰（🪴🗂️🧥）に隠れると見つからず、警戒が下がります。</li>
       <li>うまくいかないときは店員の「💰 買収」。お金で好感度を上げる（心付け）、警戒を下げる（口止め料）、レシピを買う、すぐに引き抜く（引き抜き料）ができます。</li>

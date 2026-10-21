@@ -1231,3 +1231,15 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .lv-rank small { display: block; color: var(--muted); line-height: 1.4; margin: 2px 0 4px; }
 .lv-rank ul { margin: 0; padding-left: 1.1em; line-height: 1.5; }
 .stat.level { cursor: pointer; }
+
+/* 地図（地域＝章） */
+.region-map { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px; }
+.region {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left;
+  border: 2px solid var(--line); border-radius: 12px; padding: 6px 8px; background: var(--panel-2);
+}
+.region .ri { grid-row: span 2; font-size: 1.5rem; }
+.region b { font-size: .82rem; }
+.region small { color: var(--muted); font-size: .7rem; }
+.region.on { border-color: #7c3aed; background: #f3e8ff; box-shadow: 0 3px 0 #c4b5fd; }
+.region.locked { opacity: .55; }

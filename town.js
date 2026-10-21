@@ -79,13 +79,52 @@ const BOSSES = [
     ace: { name: 'ジョヴァンニ', nation: 'it', g: 'm', title: '伝説のシェフ', ideal: 128, persona: 'gentle', style: 'elegant',
       look: { hair: '#e3e3f0', style: 'swept', eye: '#f59e0b', skin: '#eab48c', mouth: 'smile', uniform: { body: 'chefcoat', head: 'chefhat' } } } },
 ];
+// 第2章以降の名店。限定アイテムの代わりに「名店の証」（人気度 +5）が手に入る
+const bossLook = (hair, style, eye, skin, mouth, uniform) => ({ hair, style, eye, skin, mouth, uniform });
+BOSSES.push(
+  // 首都圏
+  { id: 'kagura', region: 'metro', g: 3, name: '浅草 甘味処かぐら', type: '老舗の甘味処', emoji: '🍡', style: 'casual', recipe: 'anmitsu', trophy: true,
+    ace: { name: 'チヨ', nation: 'jp', g: 'f', title: '看板娘の若女将', ideal: 64, persona: 'gentle', style: 'casual', look: bossLook('#22223a', 'bob', '#e11d48', '#ffe6d5', 'smile', { body: 'kappo', head: 'bandana' }) } },
+  { id: 'ryuho', region: 'metro', g: 5, name: '横浜中華街 龍鳳楼', type: '中華の名店', emoji: '🐉', style: 'cool', recipe: 'xiaolong', trophy: true,
+    ace: { name: 'レイ', nation: 'cn', g: 'm', title: '点心の天才', ideal: 80, persona: 'cool', style: 'cool', look: bossLook('#22223a', 'swept', '#14b8a6', '#fdd8bf', 'smile', { body: 'chefcoat' }) } },
+  { id: 'sora', region: 'metro', g: 7, name: '代官山 ブランチ・ソラ', type: 'おしゃれカフェ', emoji: '☁️', style: 'cute', recipe: 'pancake', trophy: true,
+    ace: { name: 'ヒカリ', nation: 'jp', g: 'f', title: 'カリスマ店員', ideal: 96, persona: 'trendy', style: 'cute', look: bossLook('#f6d66b', 'pony', '#a855f7', '#ffe6d5', 'cat', { body: 'cafeapron', head: 'ribbon' }) } },
+  { id: 'nami', region: 'metro', g: 9, name: '築地 鮨 波しぶき', type: '市場の名店', emoji: '🐟', style: 'elegant', recipe: 'kaisendon', trophy: true,
+    ace: { name: 'ゲン', nation: 'jp', g: 'm', title: '目利きの大将', ideal: 112, persona: 'passion', style: 'casual', look: bossLook('#3a2a2a', 'short', '#f59e0b', '#eab48c', 'open', { body: 'kappo', head: 'hachimaki' }) } },
+  { id: 'tsukikage', region: 'metro', g: 10, name: '銀座 グランメゾン月影', type: '銀座の三ツ星', emoji: '🌙', style: 'elegant', recipe: 'tsukikage', trophy: true,
+    ace: { name: 'レン', nation: 'jp', g: 'm', title: '銀座の若き総料理長', ideal: 128, persona: 'cool', style: 'elegant', look: bossLook('#e3e3f0', 'swept', '#2f7cf6', '#ffe6d5', 'smile', { body: 'chefcoat', head: 'chefhat' }) } },
+  // アジア
+  { id: 'kingyo', region: 'asia', g: 3, name: '台北 夜市の金魚屋台', type: '夜市の人気屋台', emoji: '🏮', style: 'casual', recipe: 'luroufan', trophy: true,
+    ace: { name: 'メイリン', nation: 'cn', g: 'f', title: '夜市の看板娘', ideal: 64, persona: 'trendy', style: 'casual', look: bossLook('#22223a', 'twin', '#e11d48', '#fdd8bf', 'cat', { body: 'fastfood' }) } },
+  { id: 'hohoemi', region: 'asia', g: 5, name: 'バンコク 微笑みキッチン', type: 'タイ料理の名店', emoji: '🐘', style: 'casual', recipe: 'tomyum', trophy: true,
+    ace: { name: 'ソムチャイ', nation: 'th', g: 'm', title: '炎の料理人', ideal: 80, persona: 'passion', style: 'wild', look: bossLook('#22223a', 'spiky', '#f59e0b', '#c98d68', 'open', { body: 'chefcoat', head: 'bandana' }) } },
+  { id: 'okyu', region: 'asia', g: 7, name: 'ソウル 王宮韓定食', type: '宮廷料理の名店', emoji: '🏯', style: 'elegant', recipe: 'hanjeong', trophy: true,
+    ace: { name: 'ジウ', nation: 'kr', g: 'f', title: '宮廷料理の継承者', ideal: 96, persona: 'cool', style: 'elegant', look: bossLook('#3a2a2a', 'long', '#8b5a2b', '#ffe6d5', 'smile', { body: 'kappo' }) } },
+  { id: 'tenku', region: 'asia', g: 9, name: 'シンガポール 天空ラウンジ', type: '天空のレストラン', emoji: '🌃', style: 'cool', recipe: 'chilicrab', trophy: true,
+    ace: { name: 'アルジュン', nation: 'in', g: 'm', title: 'スパイスの魔術師', ideal: 112, persona: 'gentle', style: 'cool', look: bossLook('#22223a', 'swept', '#16a34a', '#c98d68', 'smile', { body: 'garcon' }) } },
+  { id: 'hisui', region: 'asia', g: 10, name: '香港 翡翠楼', type: '香港の三ツ星', emoji: '💎', style: 'elegant', recipe: 'peking', trophy: true,
+    ace: { name: 'ウェイ', nation: 'cn', g: 'm', title: '翡翠楼の総料理長', ideal: 128, persona: 'struggle', style: 'elegant', look: bossLook('#22223a', 'short', '#14b8a6', '#fdd8bf', 'smile', { body: 'chefcoat', head: 'chefhat' }) } },
+  // 世界
+  { id: 'rose', region: 'world', g: 3, name: 'ロンドン ティールーム薔薇', type: '老舗のティールーム', emoji: '🫖', style: 'elegant', recipe: 'teaset', trophy: true,
+    ace: { name: 'グレース', nation: 'gb', g: 'f', title: '紅茶の女王', ideal: 64, persona: 'gentle', style: 'elegant', look: bossLook('#c0703c', 'long', '#2f7cf6', '#ffe6d5', 'smile', { body: 'cafeapron', head: 'ribbon' }) } },
+  { id: 'brooklyn', region: 'world', g: 5, name: 'NY ブルックリン・ダイナー', type: '伝説のダイナー', emoji: '🗽', style: 'casual', recipe: 'nyburger', trophy: true,
+    ace: { name: 'マイケル', nation: 'us', g: 'm', title: '摩天楼のグリル番長', ideal: 80, persona: 'passion', style: 'wild', look: bossLook('#eab04a', 'spiky', '#2f7cf6', '#fdd8bf', 'open', { body: 'fastfood', head: 'cap' }) } },
+  { id: 'caesar', region: 'world', g: 7, name: 'ローマ トラットリア・カエサル', type: '永遠の都の食堂', emoji: '🏛️', style: 'cool', recipe: 'carbonara', trophy: true,
+    ace: { name: 'キアラ', nation: 'it', g: 'f', title: 'パスタの女帝', ideal: 96, persona: 'dreamer', style: 'cool', look: bossLook('#7a3e2a', 'pony', '#16a34a', '#fdd8bf', 'cat', { body: 'trattoria' }) } },
+  { id: 'hofburg', region: 'world', g: 9, name: 'ウィーン カフェ・ホーフブルク', type: '宮廷カフェ', emoji: '🎻', style: 'elegant', recipe: 'sacher', trophy: true,
+    ace: { name: 'クララ', nation: 'de', g: 'f', title: '宮廷菓子職人', ideal: 112, persona: 'cool', style: 'elegant', look: bossLook('#f6d66b', 'bob', '#a855f7', '#ffe6d5', 'smile', { body: 'patissier' }) } },
+  { id: 'grandsoleil', region: 'world', g: 10, name: 'パリ ル・グラン・ソレイユ', type: 'パリの三ツ星', emoji: '🗼', style: 'elegant', recipe: 'parisfull', trophy: true,
+    ace: { name: 'アンリ', nation: 'fr', g: 'm', title: '世界一のシェフ', ideal: 128, persona: 'gentle', style: 'elegant', look: bossLook('#e3e3f0', 'swept', '#f59e0b', '#eab48c', 'smile', { body: 'chefcoat', head: 'chefhat' }) } },
+);
 const BOSS = Object.fromEntries(BOSSES.map(b => [b.id, b]));
+const bossRegion = b => b.region || 'town';
 const BOSS_POWER = 4;      // ボスの店は同じ格の店より強い
 const BOSS_ALERT = 1.3;    // ボスの店は警戒されやすい
 
 // ボスの攻略状況（限定アイテム・固有レシピ・エース）
 function bossProgress(b) {
-  return { item: S.wardrobe.owned.includes(b.item), recipe: S.recipes.includes(b.recipe), ace: !!(S.bossAces || {})[b.id] };
+  const item = b.trophy ? (S.trophies || []).includes(b.id) : S.wardrobe.owned.includes(b.item);
+  return { item, recipe: S.recipes.includes(b.recipe), ace: !!(S.bossAces || {})[b.id] };
 }
 const bossCleared = b => Object.values(bossProgress(b)).every(Boolean);
 
@@ -126,10 +165,40 @@ const BAN_MS = 20 * 60 * 1000;
 const BATTLE_CD_MS = 5 * 60 * 1000;
 const ALERT_DECAY_PER_MIN = 10;
 
+// ===== 地域（章）=====
+// mult：その地域の店の強さ・報酬・買収の値段の倍率。nations：店員の出身（自分の地域の人が中心）
+const REGIONS = [
+  { id: 'town',  ch: 1, name: '街',     icon: '🏘️', ranks: [0, 5],   mult: 1, nations: ['de', 'it', 'gb', 'pl'], cities: null },
+  { id: 'metro', ch: 2, name: '首都圏', icon: '🚃', ranks: [6, 9],   mult: 2, nations: ['jp'], cities: ['渋谷', '新宿', '池袋', '吉祥寺', '横浜'] },
+  { id: 'asia',  ch: 3, name: 'アジア', icon: '🌏', ranks: [10, 13], mult: 4, nations: ['cn', 'kr', 'th', 'vn', 'in'], cities: ['香港', '台北', 'バンコク', 'ソウル', 'シンガポール', 'ハノイ', 'ムンバイ'] },
+  { id: 'world', ch: 4, name: '世界',   icon: '🌍', ranks: [14, 17], mult: 8, nations: ['fr', 'es', 'us', 'br', 'tr'], cities: ['パリ', 'ローマ', 'ニューヨーク', 'ロンドン', 'ウィーン', 'バルセロナ', 'イスタンブール'] },
+];
+REGIONS.forEach(r => { r.bosses = () => BOSSES.filter(b => bossRegion(b) === r.id); });
+const REGION = Object.fromEntries(REGIONS.map(r => [r.id, r]));
+// 章のクリア：最後のランク＋その地域の名店をすべて制覇
+const chapterCleared = ch => { const r = REGIONS[ch - 1]; return S.rank >= r.ranks[1] && r.bosses().every(bossCleared); };
+const regionOpen = r => r.ch === 1 || chapterCleared(r.ch - 1);
+// いま進めている章（クリアした章の次。全部クリアしたら4）
+function chapterReached() {
+  let ch = 1;
+  while (ch < REGIONS.length && chapterCleared(ch)) ch++;
+  return ch;
+}
+const regionOf = st => REGION[st.region || 'town'];
+const regionMult = st => regionOf(st).mult;
+// その地域で現れる店の格の上限。クリアした章の地域は全部の格が出る
+function maxGradeIn(r) {
+  if (chapterCleared(r.ch)) return 10;
+  if (r.ch === 1) return Math.min(10, Math.floor(3 + S.rank * 1.5));
+  return Math.min(10, 4 + Math.max(0, S.rank - r.ranks[0]) * 2);
+}
+// 店の通し番号（地域をまたいでも重ならない）
+const townId = () => (S.townSeq = (S.townSeq || 1) + 1);
+
 const gradeLabel = g => g <= 2 ? 'E' : g <= 4 ? 'D' : g <= 6 ? 'C' : g <= 8 ? 'B' : g === 9 ? 'A' : 'S';
 const storeType = st => st.boss ? BOSS[st.boss] : STORE_TYPES.find(t => t.g === st.g);
-const storeById = id => S.town.stores.find(st => st.id === id);
-const maxGrade = () => Math.min(10, Math.floor(3 + S.rank * 1.5));
+const storeById = id => Object.values(S.towns || {}).flatMap(t => t.stores).find(st => st.id === id);
+const maxGrade = () => maxGradeIn(REGION[S.region || 'town']);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // ===== 主人公の魅力・馴染み =====
@@ -194,13 +263,14 @@ function meroNext(npc, st) {
 const alertMult = store => clamp(1 - blend(store) / 120, 0.3, 1.3);
 
 // ===== 街のお店 =====
-function genNpc(g, ace, type) {
-  const p = randomPerson();
+function genNpc(g, ace, type, region = REGION[S.region || 'town']) {
+  // 店員の出身はその地域の人が中心（ほかは解放した章の国から）
+  const p = randomPerson(Math.random() < 0.75 ? region.nations : null);
   p.look.uniform = STORE_UNIFORMS[g];
-  // 格が高い店ほど能力が高い。エースはどれか1つが必ず★5
-  const avg = Math.min(5, 2 + Math.floor((g - 1) / 3) + (Math.random() < 0.4 ? 1 : 0) + (ace ? 1 : 0));
+  // 格が高い店・先の章の店ほど能力が高い。エースはどれか1つが必ず★5
+  const avg = Math.min(5, 2 + Math.floor((g - 1) / 3) + (Math.random() < 0.4 ? 1 : 0) + (ace ? 1 : 0) + (region.ch - 1) * 0.5);
   return {
-    id: S.town.nextId++, ...p, stats: genStats(avg, ace), ace,
+    id: townId(), ...p, stats: genStats(avg, ace), ace,
     title: ace ? type.ace : rand(NPC_TITLES),
     ideal: 12 + g * 10 + Math.round(Math.random() * 8 - 4) + (ace ? 8 : 0),
     aff: 0,
@@ -215,13 +285,16 @@ const personaOf = n => PERSONAS[n.persona];
 
 function genStore(g) {
   const type = STORE_TYPES.find(t => t.g === g);
+  const region = REGION[S.region || 'town'];
   const used = new Set(S.town.stores.map(st => st.name));
-  let name = rand(type.names);
-  for (let n = 2; used.has(name); n++) name = `${rand(type.names)} ${n}号店`;
+  // 首都圏・アジア・世界の店は「店名＋地名＋店」
+  const nameOf = () => region.cities ? `${rand(type.names)} ${rand(region.cities)}店` : rand(type.names);
+  let name = nameOf();
+  for (let n = 2; used.has(name); n++) name = `${nameOf()} ${n}号店`;
   return {
-    id: S.town.nextId++, g, name,
+    id: townId(), g, name, region: region.id,
     recipes: [...type.recipes],
-    npcs: [genNpc(g, true, type), genNpc(g, false, type), genNpc(g, false, type)],
+    npcs: [genNpc(g, true, type, region), genNpc(g, false, type, region), genNpc(g, false, type, region)],
     alert: 0, alertAt: Date.now(), bannedUntil: 0, battleCd: 0,
   };
 }
@@ -231,14 +304,15 @@ function genBossStore(b) {
   const a = b.ace;
   const look = { ...Chara.randomLook(a.g), ...a.look };
   const ace = {
-    id: S.town.nextId++, name: a.name, nation: a.nation, g: a.g, look, stats: genStats(4.6, true), ace: true, bossAce: b.id,
+    id: townId(), name: a.name, nation: a.nation, g: a.g, look, stats: genStats(4.6, true), ace: true, bossAce: b.id,
     title: a.title, ideal: a.ideal, aff: 0, persona: a.persona, style: a.style, known: {},
   };
   const type = { ace: a.title };
+  const region = REGION[bossRegion(b)];
   return {
-    id: S.town.nextId++, g: b.g, boss: b.id, name: b.name,
+    id: townId(), g: b.g, boss: b.id, name: b.name, region: region.id,
     recipes: [b.recipe, ...(STORE_TYPES.find(t => t.g === b.g).recipes)],
-    npcs: [ace, genNpc(b.g, false, type), genNpc(b.g, false, type)],
+    npcs: [ace, genNpc(b.g, false, type, region), genNpc(b.g, false, type, region)],
     alert: 0, alertAt: Date.now(), bannedUntil: 0, battleCd: 0,
   };
 }
@@ -265,14 +339,21 @@ function refreshTown() {
 
 // 条件を満たした、まだ制覇していないボスの店を並べる（入れ替えの枠には数えない）
 function addBossStores() {
-  for (const b of BOSSES) {
+  for (const b of REGION[S.region || 'town'].bosses()) {
     if (b.g > maxGrade() || bossCleared(b) || S.town.stores.some(st => st.boss === b.id)) continue;
     S.town.stores.unshift(genBossStore(b));
   }
 }
 
+// 地域ごとの街。S.town はいま見ている地域の街を指す（保存はしない）
 function ensureTown() {
-  if (!S.town) S.town = { stores: [], refreshAt: 0, nextId: 1 };
+  if (!S.towns) {
+    S.towns = { town: S.town || { stores: [], refreshAt: 0 } };
+    S.townSeq = Math.max(1, ...S.towns.town.stores.flatMap(st => [st.id, ...st.npcs.map(n => n.id)])) + 1;
+  }
+  if (!S.region || !REGION[S.region] || !regionOpen(REGION[S.region])) S.region = 'town';
+  if (!S.towns[S.region]) S.towns[S.region] = { stores: [], refreshAt: 0 };
+  S.town = S.towns[S.region];
   for (const st of S.town.stores) {
     for (const n of st.npcs) {
       if (!n.persona) Object.assign(n, genPersona());
@@ -281,6 +362,16 @@ function ensureTown() {
   }
   if (!S.town.stores.length || Date.now() >= S.town.refreshAt) refreshTown();
   else addBossStores();
+}
+
+function setRegion(id) {
+  const r = REGION[id];
+  if (!r || !regionOpen(r) || S.spy) return;
+  S.region = id;
+  ensureTown();
+  keys.town = undefined;
+  $('town').scrollTop = 0;
+  save();
 }
 
 function currentAlert(st) {
@@ -295,7 +386,8 @@ function settleAlert(st) {
 
 // ===== 料理勝負（メンバーを送り出して結果を待つ）=====
 const secretCount = () => S.recipes.length;
-const storePower = st => 1 + st.g * 2.2 + (st.boss ? BOSS_POWER : 0);
+// 先の章の店ほど強い（章ごとに +6）
+const storePower = st => 1 + st.g * 2.2 + (st.boss ? BOSS_POWER : 0) + (regionOf(st).ch - 1) * 6;
 const teamPower = members => members.reduce((a, s) => a + powerOf(s), 0) + secretCount() + S.up.stove * 0.5;
 const winChance = (members, st) => clamp(1 / (1 + Math.exp(-(teamPower(members) - storePower(st)) / 1.5)), 0.03, 0.97);
 const battleSec = st => 30 + st.g * 20;
@@ -364,7 +456,7 @@ function resolveBattles(report) {
   S.battles = S.battles.filter(b => now < b.until);
   for (const b of done) {
     const st = storeById(b.storeId);
-    const members = b.members.map(id => S.staff.find(s => s.id === id)).filter(Boolean);
+    const members = b.members.map(id => allStaff().find(s => s.id === id)).filter(Boolean);
     for (const s of members) { s.away = null; s.walkOut = false; s.x = L.door.x; s.y = L.door.y; }
     if (!st) continue;
     st.battleCd = now + BATTLE_CD_MS;
@@ -372,14 +464,18 @@ function resolveBattles(report) {
     const great = roll < b.chance * 0.3, win = roll < b.chance;
     const lines = [];
     if (win) {
-      const money = (100 + st.g * st.g * 40) * (great ? 2 : 1);
+      const money = (100 + st.g * st.g * 40) * (great ? 2 : 1) * regionMult(st);
       S.money += money;
       S.stats.battlesWon = (S.stats.battlesWon || 0) + 1;
       addXp(st.g * 4);
       lines.push(`${great ? '🌟 大成功！' : '🏆 勝利！'}「${st.name}」との料理勝負に勝ちました（${yen(money)}）`);
       if (st.boss) {
         const b = BOSS[st.boss];
-        if (!S.wardrobe.owned.includes(b.item)) {
+        if (b.trophy && !(S.trophies || []).includes(b.id)) {
+          S.trophies = [...(S.trophies || []), b.id];
+          lines.push(`👑 ボスに勝利！ 「${b.name}」の名店の証を手に入れました（人気度 +5）`);
+          afterBossProgress(b);
+        } else if (!b.trophy && !S.wardrobe.owned.includes(b.item)) {
           S.wardrobe.owned.push(b.item);
           lines.push(`👑 ボスに勝利！ 限定アイテム「${OUTFIT[b.item].name}」を手に入れました（身支度で着られます）`);
           afterBossProgress(b);
@@ -402,10 +498,30 @@ function resolveBattles(report) {
 }
 
 // ボスを制覇したら知らせ、街から外す
+// 章をクリアしたら知らせる（最後の章はエンディング）
+function checkChapter() {
+  S.chapterSeen = S.chapterSeen || 0;
+  while (S.chapterSeen < REGIONS.length && chapterCleared(S.chapterSeen + 1)) {
+    S.chapterSeen++;
+    const r = REGIONS[S.chapterSeen - 1], next = REGIONS[S.chapterSeen];
+    if (next) {
+      openModal(`<div class="welcome"><h2>${r.icon} 第${r.ch}章「${r.name}」クリア！</h2>
+        <p>${r.name}の名店をすべて制覇しました。</p>
+        <p>次の舞台は <b>${next.icon} ${next.name}</b>。🗺️ 地図から行けるようになりました。店舗ランクも次の章へ上げられます。</p></div>
+        <div class="actions"><button class="btn" data-action="close">次の章へ</button></div>`);
+    } else {
+      openModal(`<div class="welcome"><h2>🌟 エンディング</h2>
+        <p>街の小さな屋台から始まった「永久雇用カフェ」は、ついに<b>世界一のカフェ</b>になりました。</p>
+        <p>正社員たちは今日も「永久」に働いています…。おめでとうございます！</p></div>
+        <div class="actions"><button class="btn" data-action="close">これからも営業する</button></div>`);
+    }
+  }
+}
 function afterBossProgress(b) {
   if (!bossCleared(b)) return;
   toast(`👑 「${b.name}」を完全制覇しました！`, true);
   S.stats.bosses = (S.stats.bosses || 0) + 1;
+  checkChapter();
 }
 
 function learnRecipe(id, st) {
@@ -449,7 +565,7 @@ const SPY_LINES = {
   talkNg: ['「…ご注文はお決まりですか？」', '「仕事中なので…」', '「店長に呼ばれちゃうので失礼します」', '（少し警戒されたみたい…）'],
   invite: ['「…あなたのお店、行ってみたいです！」', '「決めました。お世話になります！」', '「ずっとこんなお店で働きたかったんです」'],
 };
-const eatCost = st => 20 + st.g * 25;
+const eatCost = st => (20 + st.g * 25) * regionMult(st);
 const eatChance = st => clamp(0.22 + blend(st) / 300 - (st.g - maxGrade()) * 0.02, 0.05, 0.6);
 const peekChance = st => clamp(0.45 + blend(st) / 250 - st.g * 0.02, 0.1, 0.8);
 function topicKind(npc, topic) {
@@ -462,7 +578,7 @@ function talkChance(npc, topic) {
   const base = 0.4 + (charmFor(npc) - npc.ideal) / 80 + (k === 'like' ? 0.25 : k === 'dislike' ? -0.3 : 0) + (mero >= 2 ? 0.3 : mero ? 0.15 : 0);
   return clamp(base, 0.05, 0.95);
 }
-const inviteCost = st => st.g * 150;
+const inviteCost = st => st.g * 150 * regionMult(st);
 
 // ===== 買収（お金で確実に進める）=====
 const bribeMult = n => n.bossAce ? 4 : n.ace ? 2.5 : 1;
@@ -473,6 +589,9 @@ const BRIBES = {
   buyout:  { label: '💰 引き抜き料を払う',       desc: 'すぐにアルバイトとして加入（好感度が高いほど安い）' },
 };
 function bribeCost(kind, st, n) {
+  return Math.round(bribeBase(kind, st, n) * regionMult(st));
+}
+function bribeBase(kind, st, n) {
   switch (kind) {
     case 'gift':   return Math.round((60 + st.g * 50) * (n.ace ? 1.5 : 1));
     case 'hush':   return 40 + st.g * 40;
@@ -1322,7 +1441,7 @@ function storeCard(st) {
       <span class="grade g${gradeLabel(st.g)}">${gradeLabel(st.g)}</span>
     </div>
     ${bp ? `<div class="chips boss-goals">
-      <span class="chip ${bp.item ? 'done' : ''}">${bp.item ? '✅' : '🎁'} 限定アイテム（料理勝負で勝つ）</span>
+      <span class="chip ${bp.item ? 'done' : ''}">${bp.item ? '✅' : BOSS[st.boss].trophy ? '🏆' : '🎁'} ${BOSS[st.boss].trophy ? '名店の証' : '限定アイテム'}（料理勝負で勝つ）</span>
       <span class="chip ${bp.recipe ? 'done' : ''}">${bp.recipe ? '✅' : '📖'} 固有レシピ</span>
       <span class="chip ${bp.ace ? 'done' : ''}">${bp.ace ? '✅' : '💖'} エースを口説き落とす</span>
     </div>` : ''}
@@ -1356,10 +1475,11 @@ function renderTown(el) {
     st.bannedUntil > now, st.battleCd > now, Math.round(currentAlert(st) / 5)].join(':')).join(','),
     S.battles.map(b => b.storeId).join(','), availableForBattle().map(s => s.id + ':' + statTotal(s)).join(','),
     charm(), S.recipes.length, S.money >= refreshCost(), S.rank, S.spy ? 1 : 0,
-    BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(',')].join('|');
+    BOSSES.map(b => Object.values(bossProgress(b)).join('')).join(','), S.region, chapterReached()].join('|');
   setKeyed(el, 'town', key, `
+    ${regionMap()}
     ${bossBoard()}
-    <h3>🗺️ 引き抜き作戦</h3>
+    <h3>🗺️ 引き抜き作戦（${REGION[S.region || 'town'].icon} ${REGION[S.region || 'town'].name}）</h3>
     <p class="note"><b>格下</b>の店には「⚔️ 料理勝負」（スタッフを送り出して勝負）、<b>格上</b>の店には店長が「🕵️ 潜入」してレシピを閃いたり、店員を口説き落としたりしましょう。
     店舗ランクを上げると、もっと格の高い店（いまは最大 ${gradeLabel(maxGrade())}）が現れます。</p>
     <div class="town-bar">
@@ -1370,12 +1490,23 @@ function renderTown(el) {
     <p class="note">好感度や警戒があるお店、出禁中・勝負中のお店は入れ替わりません。</p>`);
 }
 
-const refreshCost = () => 50 * maxGrade();
+const refreshCost = () => 50 * maxGrade() * REGION[S.region || 'town'].mult;
 
 // ボスの一覧（攻略状況）
+// 地図：解放した地域は自由に行き来できる
+function regionMap() {
+  const now = REGION[S.region || 'town'];
+  return `<div class="region-map">${REGIONS.map(r => {
+    const open = regionOpen(r), cleared = chapterCleared(r.ch);
+    return `<button class="region ${r.id === now.id ? 'on' : ''} ${open ? '' : 'locked'}" data-action="region" data-id="${r.id}" ${open ? '' : 'disabled'}>
+      <span class="ri">${open ? r.icon : '🔒'}</span><b>第${r.ch}章 ${r.name}</b>
+      <small>${cleared ? '👑 クリア' : open ? `名店 ${r.bosses().filter(bossCleared).length}/${r.bosses().length}` : `第${r.ch - 1}章をクリア`}</small></button>`;
+  }).join('')}</div>`;
+}
+
 function bossBoard() {
   return `<h3>👑 名店の攻略</h3>
-    <div class="boss-board">${BOSSES.map(b => {
+    <div class="boss-board">${REGION[S.region || 'town'].bosses().map(b => {
       const p = bossProgress(b);
       const open = b.g <= maxGrade();
       const n = Object.values(p).filter(Boolean).length;
@@ -1423,6 +1554,7 @@ function townAction(d) {
     case 'spyObserve': spyObserve(+d.id); break;
     case 'spyInvite': spyInvite(+d.id, d.motive); break;
     case 'spyCharm': spyCharm(+d.id); break;
+    case 'region': setRegion(d.id); break;
     case 'spyBribe': spyBribe(+d.id, d.kind); break;
     case 'hair': changeHair(d.kind, d.id, d.store ? +d.store : null); break;
     case 'spyLeave': endSpy(`🚪 「${spyStore()?.name}」から撤収しました。好感度は次回に持ち越せます`); break;
