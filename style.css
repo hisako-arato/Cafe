@@ -1243,3 +1243,7 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .region small { color: var(--muted); font-size: .7rem; }
 .region.on { border-color: #7c3aed; background: #f3e8ff; box-shadow: 0 3px 0 #c4b5fd; }
 .region.locked { opacity: .55; }
+
+.shop-tabs { top: 11.5cqw; left: auto; right: 1.5%; }
+.shop-tabs .floor-tab { font-size: 2cqw; }
+#floor.editing .shop-tabs { display: none; }

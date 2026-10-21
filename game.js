@@ -265,6 +265,9 @@ function newGame() {
     layout: null,
     fac: {},
     weather: null,
+    shops: [{ name: '本店', manager: null }],
+    shopIdx: 0,
+    shopData: {},
   };
 }
 
@@ -303,6 +306,8 @@ function migrate(s) {
   if (!s.wardrobe.hair) s.wardrobe.hair = { style: 'long', color: 'pink' };
   s.up = Object.assign({ stove: 0, table: 0 }, s.up);
   s.fac = s.fac || {};
+  if (!s.shops) { s.shops = [{ name: '本店', manager: null }]; s.shopIdx = 0; s.shopData = {}; }
+  for (const d of Object.values(s.shopData)) for (const m of d.staff) statsOf(m);
   const now = Date.now();
   s.stoves = s.stoves.map(st => {
     if ('duration' in st) return st;
@@ -328,13 +333,16 @@ function migrate(s) {
   return s;
 }
 
+// 保存するスタッフの項目（動きや仕事など、その場かぎりの状態は保存しない）
+const staffToSave = list => list.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse, fpost }) =>
+  ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse, fpost }));
 function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
     town: undefined,   // いま見ている地域の街（S.towns の中を指しているだけ）
-    staff: S.staff.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse, fpost }) =>
-      ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse, fpost })),
+    staff: staffToSave(S.staff),
+    shopData: Object.fromEntries(Object.entries(S.shopData || {}).map(([k, d]) => [k, { ...d, staff: staffToSave(d.staff) }])),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -358,13 +366,26 @@ function applyOffline(resume = false) {
   if (o && !resume) o.away = null;
   for (const b of S.battles) {
     const sec = Math.max(0, (Math.min(now, b.until) - since) / 1000);
-    for (const id of b.members) { const m = S.staff.find(x => x.id === id); if (m) tickStamina(m, sec); }
+    for (const id of b.members) { const m = allStaff().find(x => x.id === id); if (m) tickStamina(m, sec); }
   }
   resolveBattles(rep.town);
   if (total < 1) return rep;
 
-  const start = since;
   const level0 = S.level;
+  let xp = 0;
+  // すべての店を営業する（表示していない店は、店長代理がいるときだけ）
+  forEachShop(i => { xp += runBusiness(since, total, rep, shopCanRun(i), shopLabel(i)); });
+  quietToasts = true;
+  if (xp) addXp(xp);
+  quietToasts = false;
+  if (S.level > level0) rep.level = [level0, S.level];
+  return rep;
+}
+
+// 一定時間の営業をまとめて計算する（留守中・表示していない店）。いま S にある店が対象。得た経験値を返す
+function runBusiness(start, total, rep, canOpen, label = '') {
+  const now = start + total * 1000;
+  const tag = label ? `${label}の` : '';
   const progressed = new Set();
   const custPerMin = Math.min(60 / spawnInterval(), S.tableCount * 60 / (EAT_SEC + 20)) + (hasFac('takeout') ? 3 : 0);
   let acc = 0, xp = 0;
@@ -374,14 +395,14 @@ function applyOffline(resume = false) {
     // アルバイトの契約満了
     for (const s of [...S.staff]) {
       if (s.type !== 'part' || s.expireAt > at) continue;
-      rep.quit.push(displayName(s));
+      rep.quit.push(tag + displayName(s));
       S.stoves.forEach(st => { if (st.cook === s.id) st.cook = null; });
       S.staff.splice(S.staff.indexOf(s), 1);
     }
-    const open = S.counter.length > 0 || S.stoves.some(st => st.dish && st.progress < st.duration);
+    const open = canOpen && (S.counter.length > 0 || S.stoves.some(st => st.dish && st.progress < st.duration));
     const busy = new Set();
     // 調理：担当がいなければ、手の空いた人（持ち場がホール以外）が代わりに入る
-    S.stoves.forEach((st, i) => {
+    if (canOpen) S.stoves.forEach((st, i) => {
       if (!st.dish || st.progress >= st.duration) return;
       let cook = S.staff.find(s => s.id === st.cook);
       if (!cook || !onDuty(cook) || busy.has(cook)) {
@@ -396,14 +417,14 @@ function applyOffline(resume = false) {
         const d = DISH[st.dish], n = servingsOf(d);
         addToCounter(d.id, n);
         xp += d.xp;
-        rep.done.push({ i, dish: d.id, cook: displayName(cook), n });
+        rep.done.push({ i, dish: d.id, cook: displayName(cook), n, shop: label });
         Object.assign(st, newStove());
       }
     });
     // 接客：カウンターに料理がある間、お客さんが来て食べていく
     const hall = S.staff.filter(s => onDuty(s) && s.post !== 'kitchen' && !busy.has(s));
     let served = 0;
-    if (hall.length && S.counter.length) {
+    if (canOpen && hall.length && S.counter.length) {
       acc += Math.min(custPerMin, hall.length * 4) * dt / 60;
       while (acc >= 1 && S.counter.length) {
         const dish = takeServing();
@@ -431,16 +452,12 @@ function applyOffline(resume = false) {
       }
     }
   }
-  quietToasts = true;
-  if (xp) addXp(xp);
-  quietToasts = false;
-  if (S.level > level0) rep.level = [level0, S.level];
-  S.stoves.forEach((st, i) => { if (st.dish && st.progress < st.duration && !progressed.has(i)) rep.idle.push({ i, dish: st.dish }); });
+  S.stoves.forEach((st, i) => { if (st.dish && st.progress < st.duration && !progressed.has(i)) rep.idle.push({ i, dish: st.dish, shop: label }); });
   for (const s of S.staff) {
-    if (s.rest && !s.away) rep.tired.push({ name: displayName(s), left: restLeft(s) });
-    if (s.type === 'part') rep.parts.push({ name: displayName(s), left: (s.expireAt - now) / 1000 });
+    if (s.rest && !s.away) rep.tired.push({ name: tag + displayName(s), left: restLeft(s) });
+    if (s.type === 'part') rep.parts.push({ name: tag + displayName(s), left: (s.expireAt - now) / 1000 });
   }
-  return rep;
+  return xp;
 }
 
 function initRuntime() {
@@ -462,6 +479,114 @@ function initRuntime() {
   });
 }
 
+// ===== 2号店・3号店（多店舗）=====
+// いま表示している店のデータは S にそのまま置き、ほかの店のデータは S.shopData[番号] にしまう。
+// 店を切り替えるときに入れ替える。店長（主人公）はいつも表示している店にいる
+const SHOP_FIELDS = ['stoves', 'tableCount', 'counter', 'layout', 'fac', 'decor', 'up', 'staff'];
+const SHOP_PRICES = [0, 200000, 500000];
+const shopCount = () => (S.shops || [0]).length;
+const shopMax = () => rankOf().shops || 1;
+const shopLabel = i => shopCount() > 1 ? S.shops[i].name : '';
+function newShopData() {
+  return { stoves: [newStove(), newStove()], tableCount: 2, counter: [], layout: null, fac: {}, decor: {}, up: { stove: 0, table: 0 }, staff: [] };
+}
+function takeActive() {
+  const d = {};
+  for (const k of SHOP_FIELDS) d[k] = S[k];
+  return d;
+}
+function loadShop(d) {
+  for (const k of SHOP_FIELDS) S[k] = d[k];
+}
+// i 番目の店を一時的に S に出して fn を実行する（表示中の店はそのまま）
+function withShop(i, fn) {
+  if (i === S.shopIdx) return fn();
+  const cur = takeActive();
+  loadShop(S.shopData[i]);
+  try { return fn(); } finally {
+    S.shopData[i] = takeActive();
+    loadShop(cur);
+  }
+}
+function forEachShop(fn) {
+  for (let i = 0; i < shopCount(); i++) withShop(i, () => fn(i));
+}
+// 表示していない店は、店長代理（休憩中・外出中でない正社員）がいるときだけ営業する
+function shopCanRun(i) {
+  if (i === S.shopIdx) return true;
+  const m = S.shops[i].manager;
+  return S.shopData[i].staff.some(s => s.id === m && s.type === 'perm' && onDuty(s));
+}
+function switchShop(i) {
+  if (i === S.shopIdx || !S.shops[i] || editing) return;
+  const owner = S.staff.find(s => s.owner);
+  cancelTaskOf(owner);
+  S.staff = S.staff.filter(s => !s.owner);
+  S.shopData[S.shopIdx] = takeActive();
+  loadShop(S.shopData[i]);
+  delete S.shopData[i];
+  S.staff.unshift(owner);
+  S.shopIdx = i;
+  viewFl = 1;
+  for (const el of floorEls.values()) el.remove();
+  floorEls.clear();
+  keys = {};
+  floor._fkey = null;
+  computeLayout();
+  initRuntime();
+  toast(`🏬 「${S.shops[i].name}」に移りました`);
+  save();
+}
+function openShop() {
+  const n = shopCount();
+  if (n >= shopMax() || S.money < SHOP_PRICES[n]) return;
+  S.money -= SHOP_PRICES[n];
+  S.shops.push({ name: `${n + 1}号店`, manager: null });
+  S.shopData[n] = newShopData();
+  toast(`🏬 ${n + 1}号店をオープンしました！ スタッフを異動させて、正社員を店長代理に任命しましょう`, true);
+  save();
+}
+// スタッフを別の店へ異動させる（店長は異動できない）
+function transferStaff(id, to) {
+  const s = S.staff.find(x => x.id === id);
+  if (!s || s.owner || s.away || to === S.shopIdx || !S.shopData[to] || S.shopData[to].staff.length >= staffCap()) return;
+  cancelTaskOf(s);
+  S.staff.splice(S.staff.indexOf(s), 1);
+  if (S.shops[S.shopIdx].manager === s.id) S.shops[S.shopIdx].manager = null;
+  s.task = null; s.inRoom = !!s.rest; s.fl = 1; s.transit = 0;
+  S.shopData[to].staff.push(s);
+  toast(`🚚 ${displayName(s)}を「${S.shops[to].name}」へ異動させました`);
+  closeModal();
+  save();
+}
+function setManager(id) {
+  const s = S.staff.find(x => x.id === id);
+  if (!s || s.owner || s.type !== 'perm') return;
+  S.shops[S.shopIdx].manager = s.id;
+  toast(`🎖️ ${displayName(s)}を「${S.shops[S.shopIdx].name}」の店長代理に任命しました`);
+  save();
+}
+// 表示していない店も、少しずつまとめて営業する
+let shopTimer = 0;
+function shopTick(dt) {
+  shopTimer += dt;
+  if (shopTimer < 10 || shopCount() < 2) return;
+  const sec = shopTimer;
+  shopTimer = 0;
+  const rep = { done: [], idle: [], quit: [], parts: [], tired: [], served: 0, sales: 0 };
+  let xp = 0;
+  for (let i = 0; i < shopCount(); i++) {
+    if (i === S.shopIdx) continue;
+    withShop(i, () => {
+      xp += runBusiness(Date.now() - sec * 1000, sec, rep, shopCanRun(i), S.shops[i].name);
+      for (const m of S.staff) if (m.away === 'battle') tickStamina(m, sec);
+    });
+  }
+  if (xp) addXp(xp);
+  for (const n of rep.quit) addLog(`⌛ アルバイトの${n}が契約満了で辞めてしまいました`);
+  for (const d of rep.done) addLog(`${DISH[d.dish].emoji} ${d.shop}で${DISH[d.dish].name}ができあがり、${d.n}人前を並べました`);
+}
+
 // ===== 計算 =====
 // 名店の証（第2章以降の名店に勝つと手に入る）1つにつき人気度 +5
 const popularity = () => DECOR.reduce((sum, d) => sum + (S.decor[d.id] || 0) * d.pop, 0) + (S.trophies || []).length * 5;
@@ -471,7 +596,8 @@ const stoveCap = () => rankOf().stoves;
 const tableCap = () => rankOf().tables + (hasFac('terrace') ? 2 : 0);
 const upMax = () => Math.min(6, S.rank + 1);
 const upPrice = k => Math.round(UPGRADES[k].base * Math.pow(2.2, S.up[k]));
-const permCount = () => S.staff.filter(s => s.type === 'perm' && !s.owner).length;
+// 正社員の枠は会社全体（すべての店）で数える
+const permCount = () => allStaff().filter(s => s.type === 'perm' && !s.owner).length;
 const servingsOf = d => d.long ? d.servings : d.servings + S.up.stove;
 const patienceSec = () => PATIENCE_SEC * (1 + S.up.table * 0.1);
 const xpNeeded = l => Math.round(12 * Math.pow(l, 1.5));
@@ -484,8 +610,8 @@ const stovePrice = () => Math.round(150 * Math.pow(2, normalStoves() - 2));
 const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const permSlots = () => rankOf().perm;
-// すべての店のスタッフ（2号店・3号店を含む）
-const allStaff = () => [...S.staff, ...(S.branches || []).flatMap(b => b.staff)];
+// すべての店のスタッフ（表示していない2号店・3号店を含む）
+const allStaff = () => [...S.staff, ...Object.values(S.shopData || {}).flatMap(d => d.staff)];
 // 施設：ランクの条件を満たし、まだ上限まで作っていないか
 const facMax = f => f.max ? f.max(S.rank) : 1;
 const facAvailable = f => S.rank >= f.rank && facCount(f.id) < facMax(f);
@@ -1433,7 +1559,7 @@ function renderFloor() {
       : '<span class="empty">料理がありません</span>'));
 
   // 階・施設・天気の表示
-  const fkey = [has2F(), viewFl, JSON.stringify(S.fac), weatherNow().k].join('|');
+  const fkey = [has2F(), viewFl, JSON.stringify(S.fac), weatherNow().k, S.shopIdx, shopCount()].join('|');
   if (floor._fkey !== fkey) {
     floor._fkey = fkey;
     floor.classList.toggle('view2', viewFl === 2);
@@ -1441,6 +1567,9 @@ function renderFloor() {
     floor.classList.toggle('has-lift', hasFac('elevator'));
     floor.classList.toggle('has-takeout', hasFac('takeout'));
     $('floorTabs').hidden = !has2F();
+    $('shopTabs').hidden = shopCount() < 2;
+    $('shopTabs').innerHTML = S.shops.map((sh, i) =>
+      `<button class="floor-tab ${i === S.shopIdx ? 'on' : ''}" data-action="shop" data-i="${i}">${sh.name}</button>`).join('');
     document.querySelectorAll('.floor-tab').forEach(b => b.classList.toggle('on', +b.dataset.fl === viewFl));
     const w = WEATHERS[weatherNow().k];
     $('weather').hidden = !hasFac('terrace');
@@ -1651,9 +1780,9 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type + s.post + (s.fpost || '') + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), permCount(), permSlots(), staffCap(), S.drinks].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post + (s.fpost || '') + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), permCount(), permSlots(), staffCap(), S.drinks, S.shopIdx, shopCount(), S.shops[S.shopIdx].manager].join('|');
   setKeyed(el, 'staff', key, `
-    <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 正社員の枠 ${permCount()}/${permSlots()}</h3>
+    <h3>${shopCount() > 1 ? `🏬 ${S.shops[S.shopIdx].name}の` : ''}スタッフ（${S.staff.length}/${staffCap()}人）　📜 正社員の枠 ${permCount()}/${permSlots()}（全店）</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数（正社員の枠）は店舗ランクで増えます。正社員をアルバイトに降格すると枠が1つ空きます（正社員はいきなり解雇できません）。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
@@ -1681,6 +1810,10 @@ function renderStaff(el) {
             : ''}
           ${s.rest && !s.away ? `<button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>` : ''}
           ${drinkButton(s)}
+          ${shopCount() > 1 && !s.owner && s.type === 'perm' ? (S.shops[S.shopIdx].manager === s.id
+            ? '<span class="badge owner">🎖️ 店長代理</span>'
+            : `<button class="btn ghost small" data-action="setManager" data-id="${s.id}">🎖️ 店長代理に</button>`) : ''}
+          ${shopCount() > 1 && !s.owner && !s.away ? `<button class="btn ghost small" data-action="askTransfer" data-id="${s.id}">🚚 異動</button>` : ''}
           ${s.owner ? '' : s.type === 'perm'
             ? `<button class="btn ghost small" data-action="askDemote" data-id="${s.id}">⬇ 降格</button>`
             : `<button class="btn ghost small" data-action="askFire" data-id="${s.id}">解雇</button>`}
@@ -1711,7 +1844,8 @@ function itemRow(ico, name, sub, price, action, extra, disabled, label) {
 function renderShop(el) {
   const sp = stovePrice(), tp = tablePrice();
   const stoveMax = normalStoves() >= stoveCap(), tableMax = S.tableCount >= tableCap();
-  const key = [sp, tp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(), S.rank, JSON.stringify(S.fac),
+  const key = [sp, tp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(), S.rank, JSON.stringify(S.fac), S.shopIdx, JSON.stringify(S.shops),
+    Object.values(S.shopData).map(d => d.staff.length).join(','), S.money >= (SHOP_PRICES[shopCount()] || Infinity),
     ...FACILITIES.map(f => S.money >= facPrice(f)),
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
     ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
@@ -1725,6 +1859,18 @@ function renderShop(el) {
       ${itemRow('🪑', 'テーブルを増やす', `いま ${S.tableCount}/${tableCap()} 卓`, tp, 'buy', 'data-kind="table"',
         tableMax || S.money < tp, tableMax ? '上限' : '')}
     </div>
+    ${shopMax() > 1 || shopCount() > 1 ? `<h3>🏬 店舗（${shopCount()}/${shopMax()}軒）</h3>
+    <p class="note">いまは「${S.shops[S.shopIdx].name}」を表示中。カフェ画面左上で店を切り替えられます。表示していない店は、正社員の<b>店長代理</b>がいる間だけ営業を続けます（スタッフタブで任命・異動）。</p>
+    <div class="item-list">
+      ${S.shops.map((sh, i) => {
+        const staff = i === S.shopIdx ? S.staff : S.shopData[i].staff;
+        const mgr = staff.find(x => x.id === sh.manager);
+        return `<div class="row"><div class="ico">🏬</div><div class="info"><div class="name">${sh.name}${i === S.shopIdx ? ' <span class="badge owner">表示中</span>' : ''}</div>
+          <div class="sub">スタッフ ${staff.length}/${staffCap()}人・店長代理 ${mgr ? displayName(mgr) : (i === S.shopIdx ? '店長がいます' : 'なし（営業停止中）')}</div></div>
+          ${i === S.shopIdx ? '' : `<button class="btn ghost" data-action="shop" data-i="${i}">表示する</button>`}</div>`;
+      }).join('')}
+      ${shopCount() < shopMax() ? itemRow('🏗️', `${shopCount() + 1}号店を出す`, '首都圏に新しい店を出します（コンロ2台・テーブル2卓から）', SHOP_PRICES[shopCount()], 'openShop', '', S.money < SHOP_PRICES[shopCount()]) : ''}
+    </div>` : ''}
     <h3>🏗️ 施設（増築）</h3>
     <div class="item-list">
       ${FACILITIES.map(f => {
@@ -2011,10 +2157,10 @@ function openWelcome(rep) {
     ...(rep.served ? [`<li class="good">🍽️ 留守中も営業して <b>${rep.served.toLocaleString('ja-JP')}人</b>を接客し、<b>${yen(rep.sales)}</b> の売上がありました</li>`] : []),
     ...(rep.level ? [`<li class="good">🎉 店長レベル${rep.level[0]} → <b>${rep.level[1]}</b>になりました！</li>`] : []),
     ...(rep.soldOut ? ['<li class="bad">🈳 カウンターの料理が売り切れて、途中で閉店しました。出かける前に多めに作っておきましょう</li>'] : []),
-    ...rep.done.map(d => `<li class="good">${DISH[d.dish].emoji} コンロ${d.i + 1}：${d.cook}が<b>${DISH[d.dish].name}</b>を作り、${d.n}人前をカウンターに並べました</li>`),
-    ...S.stoves.map((st, i) => st.dish && st.progress < st.duration && !rep.idle.some(d => d.i === i)
+    ...rep.done.map(d => `<li class="good">${DISH[d.dish].emoji} ${d.shop ? d.shop + 'の' : ''}${DISH[d.dish].long ? '仕込み' : 'コンロ'}：${d.cook}が<b>${DISH[d.dish].name}</b>を作り、${d.n}人前をカウンターに並べました</li>`),
+    ...S.stoves.map((st, i) => st.dish && st.progress < st.duration && !rep.idle.some(d => d.i === i && d.shop === shopLabel(S.shopIdx))
       ? `<li>${DISH[st.dish].emoji} コンロ${i + 1}：${DISH[st.dish].name}を調理中（<b>${Math.floor(st.progress / st.duration * 100)}%</b>）</li>` : '').filter(Boolean),
-    ...rep.idle.map(d => `<li class="bad">${DISH[d.dish].emoji} コンロ${d.i + 1}：${DISH[d.dish].name}は作れる人がいなかったので進んでいません</li>`),
+    ...rep.idle.map(d => `<li class="bad">${DISH[d.dish].emoji} ${d.shop ? d.shop + 'の' : ''}コンロ${d.i + 1}：${DISH[d.dish].name}は作れる人がいなかったので進んでいません</li>`),
     ...rep.tired.map(t => `<li class="bad">😪 ${t.name}は疲れて休憩室で休んでいます（復帰まで ${fmtTime(t.left)}）</li>`),
     ...rep.quit.map(n => `<li class="bad">⌛ アルバイトの${n}が契約満了で辞めてしまいました</li>`),
     ...rep.parts.map(p => `<li>⏳ アルバイトの${p.name}：契約のこり ${fmtTime(p.left)}</li>`),
@@ -2090,6 +2236,7 @@ function openHelp() {
       <li><b>⭐ 店長レベル</b>は店長の経験で、接客と調理で自動で上がり、新メニューの解禁・魅力・来客数に効きます。<b>🏆 店舗ランク</b>はお店の大きさで、条件（店長レベル・接客人数・正社員の数）を満たしたらお金を払って上げ、設備の上限・敷地・施設・街の店の格が広がります。</li>
       <li>カフェ画面右上の<b>🛠 配置</b>で、テーブル・コンロ・観葉植物などをドラッグして好きな場所へ動かせます。</li>
       <li>ランクが上がると<b>敷地</b>が広がり、ランク6で<b>2階</b>ができます（左上の「1F／2F」で切り替え）。ショップの<b>🏗️ 施設</b>で、テイクアウト窓口・仕込み設備（何時間もかけて大量に作る料理）・個室（VIP）・テラス席・エレベーターを増築できます。</li>
+      <li>第2章（首都圏）からは<b>2号店・3号店</b>を出せます。カフェ画面右上で店を切り替え、スタッフタブでスタッフの異動と<b>店長代理</b>の任命をします。表示していない店は店長代理がいる間だけ営業します。</li>
       <li>スタッフは<b>能力</b>（💪体力・🍳調理・🏃配膳・🤝忠誠度）をそれぞれ★1〜5で持ち、合計から総合評価（C〜SS）が決まります。<b>体力</b>は★1つにつき1日働ける分（店長は無限）。忠誠度が高いほど休憩からの復帰が速く、激励やドリンクへの不満も溜まりにくくなります。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
@@ -2158,6 +2305,20 @@ document.addEventListener('click', e => {
   switch (d.action) {
     case 'editLayout': setEditing(true); break;
     case 'viewFloor': setViewFloor(+d.fl); break;
+    case 'shop': switchShop(+d.i); break;
+    case 'openShop': openShop(); break;
+    case 'setManager': setManager(+d.id); break;
+    case 'transfer': transferStaff(+d.id, +d.to); break;
+    case 'askTransfer': {
+      const m = S.staff.find(x => x.id === +d.id);
+      if (!m) break;
+      openModal(`<h2>🚚 ${displayName(m)}をどの店へ異動させますか？</h2>
+        <div class="item-list">${S.shops.map((sh, i) => i === S.shopIdx ? '' : itemRow('🏬', sh.name,
+          `スタッフ ${S.shopData[i].staff.length}/${staffCap()}人`, 0, 'transfer', `data-id="${m.id}" data-to="${i}"`,
+          S.shopData[i].staff.length >= staffCap(), S.shopData[i].staff.length >= staffCap() ? '満員' : '異動')).join('')}</div>
+        <div class="actions"><button class="btn ghost" data-action="close">やめる</button></div>`);
+      break;
+    }
     case 'moveFloor': setMoveFloorMode(!moveFloorMode); break;
     case 'editDone': setEditing(false); break;
     case 'layoutReset': resetLayout(); break;
@@ -2227,6 +2388,7 @@ function frame(t) {
   const dt = Math.min(0.1, Math.max(0, (t - last) / 1000));
   last = t;
   update(dt);
+  shopTick(dt);
   renderFloor();
   spyFrame(dt);
   uiTimer += dt;
