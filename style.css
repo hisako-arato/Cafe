@@ -1247,3 +1247,15 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .shop-tabs { top: 11.5cqw; left: auto; right: 1.5%; }
 .shop-tabs .floor-tab { font-size: 2cqw; }
 #floor.editing .shop-tabs { display: none; }
+
+/* スタッフの詳しい情報 */
+.tap-info { cursor: pointer; }
+.staff-detail { display: grid; grid-template-columns: 34% 1fr; gap: 10px; align-items: center; }
+.staff-fig { background: radial-gradient(circle at 50% 70%, #fef3c7, #fde68a 60%, #fcd34d); border-radius: 16px; border: 2px solid var(--line); padding: 4px; }
+.staff-fig svg { width: 100%; height: auto; display: block; }
+.staff-detail .sub { margin-top: 2px; }
+.stat-rows { display: grid; gap: 4px; }
+.stat-row { display: grid; grid-template-columns: 5.5em auto 1fr; gap: 6px; align-items: center; font-size: .82rem; border-bottom: 1px dashed var(--line); padding: 3px 0; }
+.stat-row .k { font-weight: 800; }
+.stat-row small { color: var(--muted); font-size: .7rem; line-height: 1.35; }
+.actions.wrap { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }

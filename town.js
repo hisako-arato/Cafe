@@ -546,7 +546,7 @@ function joinFromStore(st, npc, how) {
   S.staff.push({
     id: S.nextId++, name: npc.name, g: npc.g, nation: npc.nation, look: npc.look, stats: { ...statsOf(npc) },
     title: npc.title, from: st.name, type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000,
-    owner: false, post: 'any', x: L.door.x, y: L.door.y, task: null, boss: npc.bossAce || null,
+    owner: false, post: 'any', x: L.door.x, y: L.door.y, task: null, boss: npc.bossAce || null, joinedAt: Date.now(),
   });
   S.stats.poached = (S.stats.poached || 0) + 1;
   if (npc.bossAce) {

@@ -334,8 +334,8 @@ function migrate(s) {
 }
 
 // 保存するスタッフの項目（動きや仕事など、その場かぎりの状態は保存しない）
-const staffToSave = list => list.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse, fpost }) =>
-  ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse, fpost }));
+const staffToSave = list => list.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse, fpost, joinedAt, nServed, nCooked, permAt }) =>
+  ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse, fpost, joinedAt, nServed, nCooked, permAt }));
 function save() {
   S.savedAt = Date.now();
   const data = {
@@ -928,7 +928,7 @@ function hire(cid) {
   const s = {
     id: S.nextId++, name: c.name, g: c.g, nation: c.nation, look: c.look, stats: { ...statsOf(c) },
     type: 'part', expireAt: Date.now() + CONTRACT_SEC * 1000, owner: false, post: 'any',
-    x: c.x, y: c.y, task: null,
+    x: c.x, y: c.y, task: null, joinedAt: Date.now(),
   };
   S.staff.push(s);
   S.stats.hired++;
@@ -942,6 +942,7 @@ function promote(id) {
   if (!s || s.type !== 'part' || permCount() >= permSlots()) return;
   s.type = 'perm';
   s.expireAt = 0;
+  s.permAt = Date.now();
   S.stats.promoted++;
   toast(`📜 ${displayName(s)}と永久雇用契約を結びました！ 正社員になりました`, true);
   react(s, 'promote', false);
@@ -1352,6 +1353,7 @@ function update(dt) {
         c.eat = EAT_SEC;
         c.server = null;
         s.task = null;
+        s.nServed = (s.nServed || 0) + 1;
       }
     } else if (k.type === 'cook') {
       const st = S.stoves[k.stove];
@@ -1363,6 +1365,7 @@ function update(dt) {
         if (st.progress >= st.duration) {
           st.cook = null;
           s.task = null;
+          s.nCooked = (s.nCooked || 0) + 1;
           toast(`${DISH[st.dish].emoji} ${DISH[st.dish].name}ができあがりました！ タップして並べましょう`);
           save();
         }
@@ -1787,11 +1790,12 @@ function renderStaff(el) {
     永久雇用契約を結ぶと<b>正社員</b>になり、ずっと働いてくれます。正社員にできる人数（正社員の枠）は店舗ランクで増えます。正社員をアルバイトに降格すると枠が1つ空きます（正社員はいきなり解雇できません）。</p>
     <p class="note"><b>持ち場</b>：「ホール」は配膳と片付けだけ、「厨房」は調理だけ、「両方」は手の空いた仕事を何でもします。</p>
     <p class="note"><b>能力</b>：💪体力（★1つ＝1日働ける）／🍳調理（調理の速さ）／🏃配膳（歩く・片付けの速さ）／🤝忠誠度（不満が溜まりにくく、休憩からの復帰が速い）。総合評価は4つの合計で C〜SS。<b>体力</b>が尽きると💤休憩室で休み、満タンになると職場に戻ります。🥤 エナジードリンク × ${S.drinks || 0}本</p>
+    <p class="note">👆 顔や名前をタップすると、そのスタッフの詳しい情報が見られます。</p>
     <div class="staff-list">${S.staff.map(s => `
       <div class="row">
-        ${card(s, roleOf(s))}
+        <div class="tap-info" data-action="staffInfo" data-id="${s.id}">${card(s, roleOf(s))}</div>
         <div class="info">
-          <div class="name">${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}
+          <div class="name tap-info" data-action="staffInfo" data-id="${s.id}">${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}
             <span class="badge ${roleOf(s)}">${s.owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span></div>
           ${s.title ? `<div class="sub">${s.boss ? '👑' : '🏷️'} 元「${s.from}」の${s.title}</div>` : ''}
           <div class="sub">${s.owner ? '' : `総合 ${gradeBadge(s)}　`}<span data-status="${s.id}"></span></div>
@@ -1992,6 +1996,12 @@ function renderOwner() {
 
 function renderUI() {
   renderHud();
+  const mk = modalKind();
+  if (mk && mk.startsWith('staff:')) {
+    const s = S.staff.find(x => x.id === +mk.slice(6));
+    if (!s) closeModal();
+    else if (staffInfoKey(s) !== staffInfoOpen) { const top = $('sheet').scrollTop; openStaffInfo(s.id); $('sheet').scrollTop = top; }
+  }
   if (modalKind() === 'rest') {
     const top = $('sheet').scrollTop;
     if (restKey() !== restRoomKey) { openRestRoom(); $('sheet').scrollTop = top; }
@@ -2054,6 +2064,67 @@ function useDrink(id) {
   react(s, !wasRest ? 'drinkWork' : s.rest ? 'drinkRest' : 'drinkFull');
   afterRestChange();
 }
+// ===== スタッフの詳しい情報 =====
+const ago = t => t ? `${fmtTime((Date.now() - t) / 1000)}前` : '記録なし';
+function staffInfoKey(s) {
+  return [s.id, s.type, s.post, s.fpost, s.away, !!s.rest, s.inRoom, s.abuse, s.nServed, s.nCooked, Math.round(hpOf(s) / 600),
+    S.drinks, permCount(), S.shops[S.shopIdx].manager, s.say && s.say.until > Date.now() ? s.say.text : ''].join('|');
+}
+let staffInfoOpen = '';
+function openStaffInfo(id) {
+  const s = S.staff.find(x => x.id === id);
+  if (!s) return closeModal();
+  const st = statsOf(s), owner = s.owner;
+  staffInfoOpen = staffInfoKey(s);
+  const effect = {
+    hp: owner ? '無限' : `最大 ${st.hp}日分（いま ${days(hpOf(s))}日分）`,
+    cook: `調理の速さ ×${cookRate(s).toFixed(2)}${S.up.stove ? '（コンロ強化込み）' : ''}`,
+    serve: `歩く速さ ${speedOf(s)}・片付け ${cleanTime(s).toFixed(1)}秒`,
+    loyal: owner ? '－' : `きつい台詞まで ${st.loyal * 2}回（いま ${s.abuse || 0}回）・空から全回復まで ${fmtTime(maxHp(s) / restRate(s))}`,
+  };
+  const mgr = shopCount() > 1 && S.shops[S.shopIdx].manager === s.id;
+  openModal(`<div class="sheet-head"><h2>${s.nation ? NATIONS[s.nation].flag + ' ' : ''}${displayName(s)}</h2>
+      <button class="close-x" data-action="close" aria-label="閉じる">✕</button></div>
+    <div class="staff-detail">
+      <div class="staff-fig">${Chara.svg(s.look, roleOf(s))}</div>
+      <div>
+        <div><span class="badge ${roleOf(s)}">${owner ? '店長' : s.type === 'perm' ? '正社員' : 'アルバイト'}</span>
+          ${mgr ? '<span class="badge owner">🎖️ 店長代理</span>' : ''} ${owner ? '' : `総合 ${gradeBadge(s)}`}</div>
+        <div class="sub">${s.nation ? `${NATIONS[s.nation].name}出身・` : ''}${s.g === 'f' ? '女性' : '男性'}</div>
+        ${s.title ? `<div class="sub">${s.boss ? '👑' : '🏷️'} 元「${s.from}」の${s.title}</div>` : ''}
+        <div class="sub">いま：${staffStatus(s)}</div>
+        ${shopCount() > 1 ? `<div class="sub">🏬 ${S.shops[S.shopIdx].name}に所属</div>` : ''}
+        ${hpBar(s)}
+        ${s.type === 'part' ? `<div class="sub">⏳ 契約のこり ${fmtTime((s.expireAt - Date.now()) / 1000)}</div>` : ''}
+      </div>
+    </div>
+    <h3>能力</h3>
+    <div class="stat-rows">${STATS.map(k => `<div class="stat-row">
+      <span class="k">${k.icon} ${k.name}</span>
+      <span class="stars">${owner && (k.id === 'hp' || k.id === 'loyal') ? (k.id === 'hp' ? '∞' : '－') : '★'.repeat(st[k.id]) + '☆'.repeat(5 - st[k.id])}</span>
+      <small>${effect[k.id]}</small></div>`).join('')}</div>
+    <h3>記録</h3>
+    <div class="stat-grid">
+      <div>配膳した数<b>${(s.nServed || 0).toLocaleString('ja-JP')}回</b></div>
+      <div>作った料理<b>${(s.nCooked || 0).toLocaleString('ja-JP')}回</b></div>
+      <div>入社<b>${owner ? '創業者' : ago(s.joinedAt)}</b></div>
+      <div>正社員になった<b>${s.type === 'perm' && !owner ? ago(s.permAt) : '－'}</b></div>
+      <div>持ち場<b>${POSTS[s.post || 'any']}${has2F() ? `・${FLOOR_POSTS[s.fpost || 'any']}` : ''}</b></div>
+      <div>激励・ドリンクなどの回数<b>${owner ? '－' : `${s.abuse || 0}回`}</b></div>
+    </div>
+    ${s.say && s.say.until > Date.now() ? `<p class="say-line">💬 「${s.say.text}」</p>` : ''}
+    <div class="actions wrap">
+      ${s.type === 'part' ? `<button class="btn blue small" data-action="promote" data-id="${s.id}" ${permCount() < permSlots() ? '' : 'disabled'}>📜 正社員にする</button>` : ''}
+      ${s.rest && !s.away ? `<button class="btn pink small" data-action="cheer" data-id="${s.id}">💪 激励</button>` : ''}
+      ${drinkButton(s)}
+      ${shopCount() > 1 && !owner && s.type === 'perm' && !mgr ? `<button class="btn ghost small" data-action="setManager" data-id="${s.id}">🎖️ 店長代理に</button>` : ''}
+      ${shopCount() > 1 && !owner && !s.away ? `<button class="btn ghost small" data-action="askTransfer" data-id="${s.id}">🚚 異動</button>` : ''}
+      ${owner ? '' : s.type === 'perm'
+        ? `<button class="btn ghost small" data-action="askDemote" data-id="${s.id}">⬇ 降格</button>`
+        : `<button class="btn ghost small" data-action="askFire" data-id="${s.id}">解雇</button>`}
+    </div>`, 'staff:' + s.id);
+}
+
 function openRestRoom() {
   const list = S.staff.filter(s => s.rest && !s.away);
   restRoomKey = restKey();
@@ -2363,6 +2434,7 @@ document.addEventListener('click', e => {
       break;
     case 'reset': resetGame(); break;
     case 'restRoom': openRestRoom(); break;
+    case 'staffInfo': openStaffInfo(+d.id); break;
     case 'cheer': cheer(+d.id); break;
     case 'drink': useDrink(+d.id); break;
     case 'help': openHelp(); break;
