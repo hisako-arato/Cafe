@@ -33,6 +33,25 @@ const UPGRADES = {
 };
 
 const POSTS = { any: '両方', hall: 'ホール', kitchen: '厨房' };
+// 2階ができたら、ホールの仕事をどの階でするか
+const FLOOR_POSTS = { any: '両方の階', 1: '1Fだけ', 2: '2Fだけ' };
+
+// 施設（増築）。rank はその店舗ランク（0始まり）から作れる
+const FACILITIES = [
+  { id: 'takeout', icon: '🥡', name: 'テイクアウト窓口', rank: 2, price: 6000,
+    desc: '正面の壁に窓口ができ、席を使わずに料理が売れる' },
+  { id: 'prep',    icon: '🍲', name: '仕込み設備',       rank: 2, price: 5000, max: r => r >= 4 ? 2 : 1,
+    desc: '長時間料理（何時間もかけて大量に作る料理）を作れる。ランク5で2台目' },
+  { id: 'vip',     icon: '🚪', name: '個室',             rank: 3, price: 15000,
+    desc: 'VIP専用の席。たまに来るVIPは高い料理を頼み、代金が3倍' },
+  { id: 'terrace', icon: '☀️', name: 'テラス席',         rank: 3, price: 12000,
+    desc: '店の外（正面の壁の外）にテーブルを置ける。テーブルの上限 +2。雨の日は使えない' },
+  { id: 'elevator', icon: '🛗', name: 'エレベーター',    rank: 5, price: 40000,
+    desc: '2階への移動が 5秒 → 1.5秒 になる' },
+];
+const FAC = Object.fromEntries(FACILITIES.map(f => [f.id, f]));
+const STAIRS_SEC = 5, LIFT_SEC = 1.5;
+const MAX_FLOOR1 = 10;   // 1階に置けるテーブルの目安（これを超える分は2階へ）
 
 const DISHES = [
   { id: 'coffee',  name: 'コーヒー',       emoji: '☕', time: 5,   cost: 5,   servings: 4, price: 12, xp: 1,  level: 1 },
@@ -59,6 +78,13 @@ const DISHES = [
   { id: 'souffle',     name: '幻のスフレ',               emoji: '🌠', time: 120, cost: 220, servings: 12, price: 190, xp: 32, secret: true, boss: true },
   { id: 'grandcourse', name: '太陽のグランコース',       emoji: '🌞', time: 300, cost: 700, servings: 10, price: 520, xp: 70, secret: true, boss: true },
 ];
+// 長時間料理（仕込み設備で作る）。量で稼ぐので1人前は安め
+DISHES.push(
+  { id: 'stew',      name: 'じっくり煮込みカレー', emoji: '🫕', time: 2 * 3600,  cost: 220, servings: 40,  price: 22, xp: 40,  level: 4,  long: true },
+  { id: 'roastbeef', name: 'ローストビーフ',       emoji: '🍖', time: 4 * 3600,  cost: 520, servings: 60,  price: 34, xp: 80,  level: 8,  long: true },
+  { id: 'bread',     name: '熟成パン',             emoji: '🥖', time: 8 * 3600,  cost: 600, servings: 100, price: 19, xp: 140, level: 12, long: true },
+  { id: 'soup',      name: '寸胴の特製スープ',     emoji: '🍲', time: 12 * 3600, cost: 800, servings: 150, price: 17, xp: 200, level: 16, long: true },
+);
 const DISH = Object.fromEntries(DISHES.map(d => [d.id, d]));
 const canCook = d => d.secret ? S.recipes.includes(d.id) : S.level >= d.level;
 
@@ -166,6 +192,8 @@ function newGame() {
     spy: null,
     drinks: 0,
     layout: null,
+    fac: {},
+    weather: null,
   };
 }
 
@@ -177,6 +205,7 @@ let S = load();
 let tables = [];
 let customers = [];
 let spawnTimer = 3;
+let extraTimer = 0;   // テイクアウト・VIP の来店
 let uid = 1;
 
 function load() {
@@ -202,6 +231,7 @@ function fitRank(s) {
 function migrate(s) {
   if (!s.wardrobe.hair) s.wardrobe.hair = { style: 'long', color: 'pink' };
   s.up = Object.assign({ stove: 0, table: 0 }, s.up);
+  s.fac = s.fac || {};
   const now = Date.now();
   s.stoves = s.stoves.map(st => {
     if ('duration' in st) return st;
@@ -231,8 +261,8 @@ function save() {
   S.savedAt = Date.now();
   const data = {
     ...S,
-    staff: S.staff.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse }) =>
-      ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse })),
+    staff: S.staff.map(({ id, name, g, nation, look, stats, type, expireAt, owner, post, away, title, from, boss, hp, rest, abuse, fpost }) =>
+      ({ id, name, g, nation, look, stats, type, expireAt, owner, post, away: away === 'battle' ? away : null, title, from, boss, hp, rest, abuse, fpost })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -264,7 +294,7 @@ function applyOffline(resume = false) {
   const start = since;
   const level0 = S.level;
   const progressed = new Set();
-  const custPerMin = Math.min(60 / spawnInterval(), S.tableCount * 60 / (EAT_SEC + 20));
+  const custPerMin = Math.min(60 / spawnInterval(), S.tableCount * 60 / (EAT_SEC + 20)) + (hasFac('takeout') ? 3 : 0);
   let acc = 0, xp = 0;
   for (let t = 0; t < total; t += 60) {
     const dt = Math.min(60, total - t);
@@ -343,11 +373,11 @@ function applyOffline(resume = false) {
 
 function initRuntime() {
   tables = [];
-  for (let i = 0; i < S.tableCount; i++) tables.push({ state: 'free', cust: null, cleaner: null });
+  for (let i = 0; i < tableTotal(); i++) tables.push({ state: 'free', cust: null, cleaner: null });
   customers = [];
   S.staff.forEach((s, i) => {
     const h = homeOf(s, i);
-    s.x = h.x; s.y = h.y; s.task = null;
+    s.x = h.x; s.y = h.y; s.task = null; s.fl = 1; s.transit = 0;
     // 休憩中の人は休憩室の中にいる
     s.inRoom = !!s.rest;
   });
@@ -365,22 +395,32 @@ const popularity = () => DECOR.reduce((sum, d) => sum + (S.decor[d.id] || 0) * d
 const rankOf = () => RANKS[S.rank];
 const staffCap = () => rankOf().staff;
 const stoveCap = () => rankOf().stoves;
-const tableCap = () => rankOf().tables;
+const tableCap = () => rankOf().tables + (hasFac('terrace') ? 2 : 0);
 const upMax = () => Math.min(6, S.rank + 1);
 const upPrice = k => Math.round(UPGRADES[k].base * Math.pow(2.2, S.up[k]));
 const permCount = () => S.staff.filter(s => s.type === 'perm' && !s.owner).length;
-const servingsOf = d => d.servings + S.up.stove;
+const servingsOf = d => d.long ? d.servings : d.servings + S.up.stove;
 const patienceSec = () => PATIENCE_SEC * (1 + S.up.table * 0.1);
 const xpNeeded = l => Math.round(12 * Math.pow(l, 1.5));
-const spawnInterval = () => Math.max(2, 8 - popularity() * 0.06 - S.level * 0.15);
+const spawnInterval = () => Math.max(2, 8 - popularity() * 0.06 - S.level * 0.15) * (hasFac('terrace') ? WEATHERS[weatherNow().k].mul : 1);
 const speedOf = s => 14 + statsOf(s).serve * 5;
 const cleanTime = s => 2.4 - statsOf(s).serve * 0.3;
 const cookRate = s => (0.8 + (statsOf(s).cook - 1) * 0.1) * (1 + S.up.stove * 0.15);
 const scoutFee = p => Math.round(20 + powerOf(p) * powerOf(p) * 15);
-const stovePrice = () => Math.round(150 * Math.pow(2, S.stoves.length - 2));
+const stovePrice = () => Math.round(150 * Math.pow(2, normalStoves() - 2));
 const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const permSlots = () => rankOf().perm;
+// 施設：ランクの条件を満たし、まだ上限まで作っていないか
+const facMax = f => f.max ? f.max(S.rank) : 1;
+const facAvailable = f => S.rank >= f.rank && facCount(f.id) < facMax(f);
+const facPrice = f => f.price * Math.pow(4, facCount(f.id));
+const has2F = () => S.rank >= 5;
+const facCount = id => (S.fac && S.fac[id]) || 0;
+const hasFac = id => facCount(id) > 0;
+const normalStoves = () => S.stoves.filter(st => !st.prep).length;
+const vipIdx = () => hasFac('vip') ? S.tableCount : -1;
+const tableTotal = () => S.tableCount + (hasFac('vip') ? 1 : 0);
 const payFor = dishId => Math.round(DISH[dishId].price * (1 + popularity() * 0.01) * (1 + S.up.table * 0.1));
 // ===== 体力 =====
 const maxHp = s => statsOf(s).hp * SHIFT_SEC;
@@ -427,27 +467,36 @@ const displayName = p => p.owner ? p.name : p.name + 'さん';
 // 横幅に対する % を、縦の % に直す
 const u = v => v / L.r;
 
+// 店の正面の壁（これより下は店の外）。ランクが上がるたびに外へ広がる。縮小もスクロールもしない
+const FRONT_BASE = 76, FRONT_STEP = 14.5;
 function computeLayout() {
   const el = document.getElementById('floor');
   const w = el.clientWidth, h = el.clientHeight;
   if (w && h) L.r = h / w;
   const log = el.querySelector('.log-window');
   const logTop = log && h ? log.offsetTop / h * 100 : 86;
+  // 客席の下端（メッセージウィンドウの上）
+  L.hallBottomV = Math.max(60, logTop * L.r - 6);
+  L.frontV = Math.min(FRONT_BASE + Math.min(S.rank, 4) * FRONT_STEP, L.hallBottomV + 4);
+  L.frontY = u(L.frontV);
+  // 最初の並び：1階は正面の壁の内側、収まらない分（11卓目から）は2階
   const cols = L.r >= 1.15 ? 3 : 4;
   const xs = cols === 3 ? [18, 50, 82] : [14, 38, 62, 86];
-  const rows = Math.max(1, Math.ceil(S.tableCount / cols));
-  const top = L.r >= 1.15 ? u(63) : u(56);
-  const bottom = Math.max(top, logTop - u(7));
-  const gap = rows > 1 ? (bottom - top) / (rows - 1) : 0;
-  L.tables = Array.from({ length: MAX_TABLES }, (_, i) => ({ x: xs[i % cols], y: top + Math.floor(i / cols) * gap }));
-  // 客席の下端（メッセージウィンドウの上）。配置の編集はこの範囲に収める
-  L.hallBottomV = Math.max(60, logTop * L.r - 6);
+  const n1 = Math.min(S.tableCount, MAX_FLOOR1);
+  const rows1 = Math.max(1, Math.ceil(n1 / cols));
+  const top1 = L.r >= 1.15 ? 63 : 56;
+  const gap1 = rows1 > 1 ? Math.min(19, (L.frontV - 12 - top1) / (rows1 - 1)) : 19;
+  L.tables = Array.from({ length: MAX_TABLES + 1 }, (_, i) => {
+    const f = i < MAX_FLOOR1 ? 1 : 2, j = f === 1 ? i : i - MAX_FLOOR1;
+    const v = f === 1 ? top1 + Math.floor(j / cols) * gap1 : 44 + Math.floor(j / cols) * 19;
+    return { x: xs[j % cols], y: u(v), fl: f };
+  });
   // コンロ（足元＝下端の中央）。奥の壁ぎわに並べる
   const sc = stoveCols();
-  L.stoves = Array.from({ length: MAX_STOVES }, (_, i) =>
-    ({ x: 58 + 39 * ((i % sc) + 0.5) / sc, y: u(24.5 + Math.floor(i / sc) * 5.5) }));
-  L.plants = [[74, 50], [26, 50], [97, 60], [96, 99 * L.r - 15]].map(([x, v]) => ({ x, y: u(v) }));
-  L.jukebox = { x: 4.5, y: u(50) };
+  L.stoves = Array.from({ length: MAX_STOVES + 2 }, (_, i) =>
+    ({ x: 58 + 39 * ((i % sc) + 0.5) / sc, y: u(24.5 + Math.floor(i / sc) * 5.5), fl: 1 }));
+  L.plants = [[74, 50], [26, 50], [97, 60], [96, L.frontV - 4]].map(([x, v]) => ({ x, y: u(v), fl: 1 }));
+  L.jukebox = { x: 4.5, y: u(50), fl: 1 };
   // 自分で動かした配置で上書きする
   const lay = S.layout;
   if (lay) {
@@ -457,49 +506,69 @@ function computeLayout() {
     put('plants', L.plants);
     if (lay.jukebox) L.jukebox = toFloor('jukebox', lay.jukebox);
   }
-  // 列の間隔が狭いときは人物・テーブルを縮める
-  L.s = rows > 1 ? Math.max(0.62, Math.min(1, gap / u(19))) : 1;
+  // 個室はテーブルの最後（いまのテーブル数の位置）に置く
+  if (hasFac('vip')) L.tables[S.tableCount] = lay && lay.vip ? toFloor('vip', lay.vip) : { x: 82, y: u(L.frontV - 14), fl: 1 };
+  // 画面が横長で、1階に並びきらないときだけ人やテーブルを縮める
+  L.s = Math.max(0.62, Math.min(1, gap1 / 19));
   el.style.setProperty('--s', L.s);
   // 奥が厨房（スタッフ）、カウンターをはさんで手前が客席。行き来は右端のスタッフ出入口から
-  L.counter = { x: 40, y: u(36) };
+  L.counter = { x: 40, y: u(36), fl: 1 };
   L.gateK = { x: 87, y: u(36) };
   L.gateH = { x: 87, y: u(46) };
-  L.door = { x: 95, y: 99 };
-  L.rest = { x: 22.5, y: u(20) };   // 休憩室の扉の前
+  L.entry = { x: 90 };                       // 正面の入口（壁の切れ目）
+  L.door = { x: 90, y: 99, fl: 1 };          // 店の外（お客さんが来る・帰る場所）
+  L.window = { x: 70, y: L.frontY + u(4), fl: 1 };   // テイクアウト窓口の前（店の外）
+  L.rest = { x: 22.5, y: u(20), fl: 1 };     // 休憩室の扉の前
+  L.stairs = { 1: { x: 5, y: u(55), fl: 1 }, 2: { x: 5, y: u(30), fl: 2 } };
   el.style.setProperty('--counter-z', 10 + Math.round(u(41)));
+  el.style.setProperty('--front-y', L.frontY + '%');
+  el.style.setProperty('--window-x', L.window.x + '%');
+  el.style.setProperty('--stairs1-y', L.stairs[1].y + '%');
+  el.style.setProperty('--stairs2-y', L.stairs[2].y + '%');
+  el.style.setProperty('--front-z', 10 + Math.round(L.frontY));
   L.ver++;
 }
 
 // ===== 配置の編集 =====
-// 保存する位置は x：横幅の%、v：横幅を基準にした縦の位置（cqw）。画面の縦横比が変わっても形が崩れない
+// 保存する位置は x：横幅の%、v：横幅を基準にした縦の位置（cqw）、f：階。画面の縦横比が変わっても形が崩れない
+function tableRange(f, vip) {
+  if (f === 2) return { x1: 13, x2: 87, v1: 40, v2: L.hallBottomV };
+  // テラス席があれば、正面の壁の外にも置ける（個室は中だけ）
+  return { x1: 13, x2: 87, v1: 56, v2: hasFac('terrace') && !vip ? L.hallBottomV : L.frontV - 10 };
+}
 const LAYOUT_RANGE = {
-  tables:  () => ({ x1: 13, x2: 87, v1: 56, v2: L.hallBottomV }),
+  tables:  p => tableRange(p.f || 1, false),
+  vip:     p => tableRange(p.f || 1, true),
   stoves:  () => ({ x1: 6, x2: 94, v1: 24, v2: 30 }),
-  plants:  () => ({ x1: 3, x2: 97, v1: 50, v2: L.hallBottomV + 6 }),
-  jukebox: () => ({ x1: 3, x2: 97, v1: 50, v2: L.hallBottomV + 6 }),
+  plants:  () => ({ x1: 3, x2: 97, v1: 50, v2: L.frontV - 4 }),
+  jukebox: () => ({ x1: 3, x2: 97, v1: 50, v2: L.frontV - 4 }),
 };
 // ぶつかったとみなす距離（テーブル同士・コンロ同士）
 const LAYOUT_GAP = { tables: { x: 20, v: 13 }, stoves: { x: 10.5, v: 6 } };
 function clampLayout(kind, p) {
-  const r = LAYOUT_RANGE[kind]();
+  const r = LAYOUT_RANGE[kind](p);
   const lim = (n, a, b) => Math.max(a, Math.min(b, n));
-  return { x: lim(p.x, r.x1, r.x2), v: lim(p.v, r.v1, Math.max(r.v1, r.v2)) };
+  return { x: lim(p.x, r.x1, r.x2), v: lim(p.v, r.v1, Math.max(r.v1, r.v2)), f: p.f || 1 };
 }
 function toFloor(kind, p) {
   const c = clampLayout(kind, p);
-  return { x: c.x, y: u(c.v) };
+  return { x: c.x, y: u(c.v), fl: c.f };
 }
-const fromFloor = p => ({ x: p.x, v: p.y * L.r });
+const fromFloor = p => ({ x: p.x, v: p.y * L.r, f: p.fl || 1 });
 const layoutCount = kind => kind === 'tables' ? S.tableCount : kind === 'stoves' ? S.stoves.length
+  : kind === 'vip' ? (hasFac('vip') ? 1 : 0)
   : kind === 'plants' ? Math.min(4, S.decor.plant || 0) : (S.decor.jukebox ? 1 : 0);
+// テーブル（個室を含む）同士・コンロ同士が、同じ階で重なっていないか
 function layoutHits(kind, i, p) {
-  const g = LAYOUT_GAP[kind];
+  const isTable = kind === 'tables' || kind === 'vip';
+  const g = LAYOUT_GAP[isTable ? 'tables' : kind];
   if (!g) return false;
-  const list = kind === 'tables' ? L.tables : L.stoves;
-  for (let j = 0; j < layoutCount(kind); j++) {
-    if (j === i) continue;
+  const self = kind === 'vip' ? vipIdx() : i;
+  const list = isTable ? L.tables : L.stoves, n = isTable ? tableTotal() : S.stoves.length;
+  for (let j = 0; j < n; j++) {
+    if (j === self) continue;
     const q = fromFloor(list[j]);
-    if (Math.abs(q.x - p.x) < g.x && Math.abs(q.v - p.v) < g.v) return true;
+    if ((q.f || 1) === (p.f || 1) && Math.abs(q.x - p.x) < g.x && Math.abs(q.v - p.v) < g.v) return true;
   }
   return false;
 }
@@ -507,33 +576,47 @@ function layoutHits(kind, i, p) {
 function snapshotLayout() {
   const pick = (list, n) => list.slice(0, n).map(fromFloor);
   return { tables: pick(L.tables, S.tableCount), stoves: pick(L.stoves, S.stoves.length),
-    plants: pick(L.plants, 4), jukebox: fromFloor(L.jukebox) };
+    plants: pick(L.plants, 4), jukebox: fromFloor(L.jukebox), vip: hasFac('vip') ? fromFloor(L.tables[S.tableCount]) : null };
 }
-// テーブルやコンロを買い足したとき、自分で配置していれば空いている場所に置く
-function placeNew(kind, i) {
-  if (!S.layout) return;
-  const r = LAYOUT_RANGE[kind]();
-  for (let v = r.v1; v <= r.v2; v += 3) {
-    for (let x = r.x1; x <= r.x2; x += 4) {
-      if (!layoutHits(kind, i, { x, v })) { S.layout[kind][i] = { x, v }; computeLayout(); return; }
+// テーブル・コンロ・個室を足したとき、空いている場所に置く（f を指定するとその階に）
+function placeNew(kind, i, f) {
+  if (!S.layout) S.layout = snapshotLayout();
+  const on1F = L.tables.slice(0, S.tableCount).filter((t, j) => j !== i && (t.fl || 1) === 1).length;
+  const floors = f ? [f] : kind === 'tables' && has2F() ? (on1F >= MAX_FLOOR1 ? [2, 1] : [1, 2]) : [1];
+  for (const fl of floors) {
+    const r = LAYOUT_RANGE[kind]({ f: fl });
+    for (let v = r.v1; v <= r.v2; v += 3) {
+      for (let x = r.x1; x <= r.x2; x += 4) {
+        const p = { x, v, f: fl };
+        if (layoutHits(kind, i, p)) continue;
+        if (kind === 'vip') S.layout.vip = p; else S.layout[kind][i] = p;
+        computeLayout();
+        return true;
+      }
     }
   }
+  return false;
 }
-const seatPos = ti => ({ x: L.tables[ti].x - 9 * L.s, y: L.tables[ti].y + u(3) * L.s });
-const standPos = ti => ({ x: L.tables[ti].x + 9 * L.s, y: L.tables[ti].y + u(3) * L.s });
+const seatPos = ti => ({ x: L.tables[ti].x - 9 * L.s, y: L.tables[ti].y + u(3) * L.s, fl: L.tables[ti].fl || 1 });
+const standPos = ti => ({ x: L.tables[ti].x + 9 * L.s, y: L.tables[ti].y + u(3) * L.s, fl: L.tables[ti].fl || 1 });
 const stoveCols = () => S.stoves.length > 6 ? 4 : 3;
 // 調理する人が立つ場所（コンロの奥。コンロが手前に重なって見える）
 function stovePos(i) {
   const k = L.stoves[i];
-  return { x: k.x, y: k.y - u(2) };
+  return { x: k.x, y: k.y - u(2), fl: 1 };
 }
 function homeOf(s, idx) {
   const i = idx ?? S.staff.indexOf(s);
-  return { x: 5 + (i % 8) * 6.5, y: u(36 - Math.floor(i / 8) * 4.5) };
+  return { x: 5 + (i % 8) * 6.5, y: u(36 - Math.floor(i / 8) * 4.5), fl: 1 };
 }
 
 computeLayout();
 
+// コンロと仕込み設備は、それぞれの中で1から番号を振る
+function stoveName(i) {
+  const st = S.stoves[i], n = S.stoves.slice(0, i + 1).filter(x => !!x.prep === !!st.prep).length;
+  return st.prep ? `仕込み${n}` : `コンロ${n}`;
+}
 function stoveInfo(i) {
   const st = S.stoves[i];
   if (!st.dish) return { kind: 'idle' };
@@ -579,6 +662,14 @@ function addToCounter(dishId, n) {
   const st = S.counter.find(c => c.dish === dishId);
   if (st) st.n += n; else S.counter.push({ dish: dishId, n });
 }
+// VIP はカウンターでいちばん高い料理を頼む
+function takeBest() {
+  if (!S.counter.length) return null;
+  const st = [...S.counter].sort((a, b) => DISH[b.dish].price - DISH[a.dish].price)[0];
+  st.n--;
+  if (st.n <= 0) S.counter.splice(S.counter.indexOf(st), 1);
+  return st.dish;
+}
 function takeServing() {
   if (!S.counter.length) return null;
   // お客さんは基本的に安い料理から頼む（たまに別の料理も頼む）
@@ -592,7 +683,7 @@ function takeServing() {
 // ===== アクション =====
 function orderDish(i, dishId) {
   const d = DISH[dishId], st = S.stoves[i];
-  if (!d || !st || st.dish || S.level < d.level || S.money < d.cost) return;
+  if (!d || !st || st.dish || !!d.long !== !!st.prep || !canCook(d) || S.money < d.cost) return;
   S.money -= d.cost;
   Object.assign(st, { dish: dishId, progress: 0, duration: d.time * 1000, cook: null });
   closeModal();
@@ -662,6 +753,13 @@ function removeStaff(s, message) {
   save();
 }
 
+function setFloorPost(id, f) {
+  const s = S.staff.find(s => s.id === id);
+  if (!s || !FLOOR_POSTS[f]) return;
+  s.fpost = f;
+  if (s.task && s.task.type !== 'cook') cancelTaskOf(s);
+  save();
+}
 function setPost(id, post) {
   const s = S.staff.find(s => s.id === id);
   if (!s || !POSTS[post]) return;
@@ -712,7 +810,7 @@ function upgrade(k) {
 function buy(kind, id) {
   if (kind === 'stove') {
     const p = stovePrice();
-    if (S.stoves.length >= stoveCap() || S.money < p) return;
+    if (normalStoves() >= stoveCap() || S.money < p) return;
     S.money -= p;
     S.stoves.push(newStove());
     computeLayout();
@@ -722,11 +820,32 @@ function buy(kind, id) {
     const p = tablePrice();
     if (S.tableCount >= tableCap() || S.money < p) return;
     S.money -= p;
+    // 個室はテーブルの最後にあるので、新しいテーブルはその手前に入れる
+    const vipOld = vipIdx();
     S.tableCount++;
-    tables.push({ state: 'free', cust: null, cleaner: null });
+    if (vipOld >= 0) {
+      tables.splice(vipOld, 0, { state: 'free', cust: null, cleaner: null });
+      for (const c of customers) if (c.table === vipOld) c.table++;
+      for (const m of S.staff) if (m.task && m.task.table === vipOld) m.task.table++;
+    } else tables.push({ state: 'free', cust: null, cleaner: null });
     computeLayout();
     placeNew('tables', S.tableCount - 1);
     toast('🪑 テーブルを増やしました');
+  } else if (kind === 'fac') {
+    const f = FAC[id];
+    if (!f || !facAvailable(f) || S.money < facPrice(f)) return;
+    S.money -= facPrice(f);
+    S.fac[id] = facCount(id) + 1;
+    if (id === 'prep') {
+      S.stoves.push({ ...newStove(), prep: true });
+      computeLayout();
+      placeNew('stoves', S.stoves.length - 1);
+    } else if (id === 'vip') {
+      tables.push({ state: 'free', cust: null, cleaner: null });
+      computeLayout();
+      placeNew('vip', 0);
+    } else computeLayout();
+    toast(`${f.icon} ${f.name}ができました！`, true);
   } else if (kind === 'decor') {
     const d = DECOR.find(d => d.id === id);
     const p = decorPrice(d);
@@ -769,37 +888,96 @@ function moveTo(o, p, step) {
   return false;
 }
 
-// 厨房と客席をまたぐときはスタッフ出入口を通る
+// 厨房と客席をまたぐときはスタッフ出入口を、店の中と外をまたぐときは正面の入口を、
+// 階をまたぐときは階段（エレベーター）を通る
 const zoneOf = y => y <= L.gateK.y + 0.01 ? 0 : y >= L.gateH.y - 0.01 ? 2 : 1;
-function walkTo(o, p, step) {
-  const zo = zoneOf(o.y), zp = zoneOf(p.y) === 0 ? 0 : 2;
-  if (zo === zp) return moveTo(o, p, step);
-  const near = zp === 0 ? L.gateK : L.gateH, back = zp === 0 ? L.gateH : L.gateK;
-  // 出入口の手前まで来たら、扉を抜けて反対側へ
-  const via = zo === 1 || (o.x === back.x && o.y === back.y) ? near : back;
-  moveTo(o, via, step);
+const liftSec = () => hasFac('elevator') ? LIFT_SEC : STAIRS_SEC;
+const at = (o, p) => Math.abs(o.x - p.x) < 0.01 && Math.abs(o.y - p.y) < 0.01;
+// 二つの通り道（back → near）を抜けて反対側へ行く
+function passThrough(o, back, near, step) {
+  moveTo(o, at(o, back) ? near : back, step);
   return false;
 }
+function walkTo(o, p, step) {
+  const fo = o.fl || 1, fp = p.fl || 1;
+  if (fo !== fp) {
+    if (walkTo(o, L.stairs[fo], step)) { o.transit = liftSec(); o.toFl = fp; o.moving = false; }
+    return false;
+  }
+  if (fo === 1) {
+    const zo = zoneOf(o.y), zp = zoneOf(p.y) === 0 ? 0 : 2;
+    if (zo !== zp) {
+      const near = zp === 0 ? L.gateK : L.gateH, back = zp === 0 ? L.gateH : L.gateK;
+      if (zo === 1) { moveTo(o, near, step); return false; }
+      return passThrough(o, back, near, step);
+    }
+    const outO = o.y > L.frontY, outP = p.y > L.frontY;
+    if (zo === 2 && outO !== outP) {
+      const inside = { x: L.entry.x, y: L.frontY - u(3) }, outside = { x: L.entry.x, y: L.frontY + u(3) };
+      // 入口の通り道に入ったら、そのまま反対側へ抜ける
+      const inDoor = Math.abs(o.x - L.entry.x) < 0.01 && o.y >= inside.y - 0.01 && o.y <= outside.y + 0.01;
+      moveTo(o, inDoor ? (outP ? outside : inside) : (outP ? inside : outside), step);
+      return false;
+    }
+  }
+  return moveTo(o, p, step);
+}
+// 階段・エレベーターで移動している間は姿が消え、時間がたつと反対の階に出る
+function inTransit(o, dt) {
+  if (!(o.transit > 0)) return false;
+  o.transit -= dt;
+  if (o.transit <= 0) {
+    o.transit = 0;
+    o.fl = o.toFl;
+    const p = L.stairs[o.fl];
+    o.x = p.x; o.y = p.y;
+  }
+  return true;
+}
 
-function spawnCustomer() {
-  const ti = tables.findIndex(t => t.state === 'free');
+// テラス席（正面の壁の外のテーブル）は雨の日は使えない
+const isOutside = ti => (L.tables[ti].fl || 1) === 1 && L.tables[ti].y > L.frontY;
+const tableOpen = ti => !(isOutside(ti) && weatherNow().k === 'rain');
+function spawnCustomer(vip) {
+  const ti = vip ? (tables[vipIdx()]?.state === 'free' ? vipIdx() : -1)
+    : tables.findIndex((t, i) => i < S.tableCount && t.state === 'free' && tableOpen(i));
   if (ti < 0) return false;
+  const pat = patienceSec() * (vip ? 2 : 1);
   const c = {
-    id: uid++, ...randomPerson(), stats: genStats(rollAvg()),
-    x: L.door.x, y: L.door.y, table: ti, state: 'in',
-    patience: patienceSec(), maxPatience: patienceSec(), server: null, dish: null, eat: 0, flip: true,
+    id: uid++, ...randomPerson(), stats: genStats(vip ? 3 : rollAvg()), vip: !!vip,
+    x: L.door.x, y: L.door.y, fl: 1, table: ti, state: 'in',
+    patience: pat, maxPatience: pat, server: null, dish: null, eat: 0, flip: true,
   };
   tables[ti].state = 'occupied';
   tables[ti].cust = c.id;
   customers.push(c);
-  addLog(`🚪 ${NATIONS[c.nation].flag} ${displayName(c)}が来店しました${gradeIdx(c) >= 2 ? '（✨ 仕事ができそう！）' : ''}`);
+  addLog(`🚪 ${NATIONS[c.nation].flag} ${vip ? '👑 VIPの' : ''}${displayName(c)}が来店しました${gradeIdx(c) >= 2 ? '（✨ 仕事ができそう！）' : ''}`);
   return true;
+}
+// テイクアウトのお客さん（席を使わず、窓口で1品買って帰る）
+function spawnTakeout() {
+  if (!hasFac('takeout') || !S.counter.length) return;
+  customers.push({ id: uid++, ...randomPerson(), stats: genStats(1), takeout: true,
+    x: L.door.x, y: L.door.y, fl: 1, state: 'in', flip: true });
+}
+
+// ===== 天気（テラス席に影響する）=====
+const WEATHERS = { sun: { icon: '☀️', name: '晴れ', mul: 0.9 }, cloud: { icon: '☁️', name: 'くもり', mul: 1 }, rain: { icon: '☔', name: '雨', mul: 1.1 } };
+function weatherNow() {
+  const now = Date.now();
+  if (!S.weather || now >= S.weather.until) {
+    const r = Math.random();
+    S.weather = { k: r < 0.55 ? 'sun' : r < 0.85 ? 'cloud' : 'rain', until: now + 3600 * 1000 };
+  }
+  return S.weather;
 }
 
 function customerLeave(c, angry) {
   const t = tables[c.table];
-  t.state = angry ? 'free' : 'dirty';
-  t.cust = null;
+  if (t) {
+    t.state = angry ? 'free' : 'dirty';
+    t.cust = null;
+  }
   c.state = 'out';
   c.angry = angry;
 }
@@ -821,14 +999,16 @@ function cancelTaskOf(s) {
 }
 
 // 持ち場（ホール／厨房／両方）の範囲で、配膳 → 調理 → 片付け の順に仕事を探す
+// 2階ができたら、ホールの仕事はその人の担当の階だけ
+const floorOk = (s, ti) => !has2F() || !s.fpost || s.fpost === 'any' || +s.fpost === (L.tables[ti]?.fl || 1);
 function findTask(s) {
   const post = s.post || 'any';
   if (post !== 'kitchen' && S.counter.length) {
     const c = customers
-      .filter(c => c.state === 'wait' && !c.server)
+      .filter(c => c.state === 'wait' && !c.server && floorOk(s, c.table))
       .sort((a, b) => a.patience - b.patience)[0];
     if (c) {
-      s.task = { type: 'serve', cid: c.id, dish: takeServing(), phase: 'counter' };
+      s.task = { type: 'serve', cid: c.id, dish: c.vip ? takeBest() : takeServing(), phase: 'counter' };
       c.server = s.id;
       return;
     }
@@ -839,7 +1019,7 @@ function findTask(s) {
     s.task = { type: 'cook', stove: si, phase: 'go' };
     return;
   }
-  const ti = post === 'kitchen' ? -1 : tables.findIndex(t => t.state === 'dirty' && !t.cleaner);
+  const ti = post === 'kitchen' ? -1 : tables.findIndex((t, i) => t && t.state === 'dirty' && !t.cleaner && floorOk(s, i));
   if (ti >= 0) {
     tables[ti].cleaner = s.id;
     s.task = { type: 'clean', table: ti, phase: 'go', t: 0 };
@@ -859,10 +1039,33 @@ function update(dt) {
   if (spawnTimer >= spawnInterval()) {
     spawnTimer = spawnCustomer() ? 0 : spawnInterval() - 1.5;
   }
+  extraTimer += dt;
+  if (extraTimer >= 20) {
+    extraTimer = 0;
+    spawnTakeout();
+    if (hasFac('vip') && Math.random() < 0.5) spawnCustomer(true);
+  }
 
   for (const c of customers) {
+    if (inTransit(c, dt)) continue;
+    if (c.takeout) {
+      // 窓口で1品買って帰る
+      if (c.state === 'in' && walkTo(c, L.window, CUST_SPEED * dt)) {
+        const dish = takeServing();
+        if (dish) {
+          const pay = payFor(dish);
+          S.money += pay;
+          S.stats.served++;
+          floatText('+' + yen(pay), c.x, c.y - 16);
+          addLog(`🥡 テイクアウト：${DISH[dish].emoji}${DISH[dish].name}が売れました（${yen(pay)}）`);
+          addXp(1);
+        }
+        c.state = 'out';
+      } else if (c.state === 'out' && walkTo(c, L.door, CUST_SPEED * dt)) c.gone = true;
+      continue;
+    }
     if (c.state === 'in') {
-      if (moveTo(c, seatPos(c.table), CUST_SPEED * dt)) { c.state = 'wait'; c.flip = false; }
+      if (walkTo(c, seatPos(c.table), CUST_SPEED * dt)) { c.state = 'wait'; c.flip = false; }
     } else if (c.state === 'wait') {
       if (!c.server) {
         c.patience -= dt;
@@ -875,7 +1078,7 @@ function update(dt) {
     } else if (c.state === 'eat') {
       c.eat -= dt;
       if (c.eat <= 0) {
-        const pay = payFor(c.dish);
+        const pay = payFor(c.dish) * (c.vip ? 3 : 1);
         S.money += pay;
         S.stats.served++;
         floatText('+' + yen(pay), c.x, c.y - 16);
@@ -884,7 +1087,7 @@ function update(dt) {
         addXp(1);
       }
     } else if (c.state === 'out') {
-      if (moveTo(c, L.door, CUST_SPEED * dt)) c.gone = true;
+      if (walkTo(c, L.door, CUST_SPEED * dt)) c.gone = true;
     }
   }
   customers = customers.filter(c => !c.gone);
@@ -894,6 +1097,7 @@ function update(dt) {
   S.staff.forEach((s, i) => {
     if (s.away) {
       tickStamina(s, dt);
+      if (inTransit(s, dt)) return;
       if (s.walkOut && walkTo(s, L.door, speedOf(s) * dt)) s.walkOut = false;
       return;
     }
@@ -908,6 +1112,7 @@ function update(dt) {
     } else if (tick === 'back') {
       backToWork(s, `☕ ${displayName(s)}が休憩から戻りました`);
     }
+    if (inTransit(s, dt)) return;
     if (s.rest) {
       if (!s.inRoom && walkTo(s, L.rest, speedOf(s) * dt)) s.inRoom = true;
       return;
@@ -1010,12 +1215,21 @@ function placePerson(el, p, role) {
   }
 }
 
+// いま表示している階（1 か 2）
+let viewFl = 1;
+const visible = o => (o.fl || 1) === viewFl && !(o.transit > 0);
 function renderFloor() {
   for (const el of floorEls.values()) el._seen = false;
+  if (viewFl === 2 && !has2F()) setViewFloor(1);
 
   tables.forEach((t, i) => {
+    if ((L.tables[i].fl || 1) !== viewFl) return;
     const el = floorEl('t' + i, 'table', '');
-    if (!el._init) { el._init = true; el.dataset.edit = 'tables'; el.dataset.i = i; }
+    const vip = i === vipIdx();
+    el.dataset.edit = vip ? 'vip' : 'tables';
+    el.dataset.i = vip ? 0 : i;
+    el.classList.toggle('vip', vip);
+    el.classList.toggle('closed', !tableOpen(i));
     const chair = floorEl('ch' + i, 'chair', CHAIR_SVG);
     if (el._ver !== L.ver) {
       el._ver = L.ver;
@@ -1032,11 +1246,11 @@ function renderFloor() {
   });
 
   for (const c of customers) {
-    const el = floorEl('c' + c.id, 'person customer' + (gradeIdx(c) >= 2 ? ' rare' : ''), PERSON_HTML);
+    if (!visible(c)) continue;
+    const el = floorEl('c' + c.id, 'person customer' + (gradeIdx(c) >= 2 ? ' rare' : '') + (c.vip ? ' vip' : '') + (c.takeout ? ' takeout' : ''), PERSON_HTML);
     if (!el._init) {
       el._init = true;
-      el.dataset.action = 'scout';
-      el.dataset.cid = c.id;
+      if (!c.takeout) { el.dataset.action = 'scout'; el.dataset.cid = c.id; }
     }
     placePerson(el, c, 'customer');
     const bubble = el.querySelector('.bubble');
@@ -1060,7 +1274,7 @@ function renderFloor() {
   }
 
   for (const s of S.staff) {
-    if ((s.away && !s.walkOut) || s.inRoom) continue;
+    if ((s.away && !s.walkOut) || s.inRoom || !visible(s)) continue;
     const el = floorEl('s' + s.id, 'person staff', PERSON_HTML);
     const role = s.away === 'spy' ? 'protag' : roleOf(s);
     placePerson(el, s, role);
@@ -1088,7 +1302,7 @@ function renderFloor() {
   }
 
   // コンロ（厨房の床に置く。配置の編集で動かせる）
-  S.stoves.forEach((st, i) => {
+  if (viewFl === 1) S.stoves.forEach((st, i) => {
     const el = floorEl('k' + i, 'stove-unit', '');
     if (!el._init) { el._init = true; el.dataset.edit = 'stoves'; el.dataset.i = i; }
     if (el._ver !== L.ver) {
@@ -1100,11 +1314,11 @@ function renderFloor() {
     const k = info.kind + (st.dish || '');
     if (el._k !== k) {
       el._k = k;
-      el.className = 'stove-unit ' + info.kind;
+      el.className = 'stove-unit ' + info.kind + (st.prep ? ' prep' : '');
       el.dataset.action = info.kind === 'idle' ? 'pick' : info.kind === 'ready' ? 'collect' : 'screen';
       if (info.kind === 'idle' || info.kind === 'ready') delete el.dataset.screen; else el.dataset.screen = 'kitchen';
-      el.setAttribute('aria-label', `コンロ${i + 1}`);
-      el.innerHTML = `<span>${info.kind === 'idle' ? '🔥' : DISH[st.dish].emoji}</span>${info.kind === 'cooking' || info.kind === 'waiting' ? '<i class="fill"></i>' : ''}`;
+      el.setAttribute('aria-label', stoveName(i));
+      el.innerHTML = `<span>${info.kind === 'idle' ? (st.prep ? '🍲' : '🔥') : DISH[st.dish].emoji}</span>${info.kind === 'cooking' || info.kind === 'waiting' ? '<i class="fill"></i>' : ''}`;
     }
     if (info.kind === 'cooking' || info.kind === 'waiting') el.querySelector('.fill').style.width = (info.ratio * 100).toFixed(1) + '%';
   });
@@ -1127,8 +1341,23 @@ function renderFloor() {
       ? S.counter.map(st => `<span class="stack">${DISH[st.dish].emoji}<small>×${st.n}</small></span>`).join('')
       : '<span class="empty">料理がありません</span>'));
 
+  // 階・施設・天気の表示
+  const fkey = [has2F(), viewFl, JSON.stringify(S.fac), weatherNow().k].join('|');
+  if (floor._fkey !== fkey) {
+    floor._fkey = fkey;
+    floor.classList.toggle('view2', viewFl === 2);
+    floor.classList.toggle('has2f', has2F());
+    floor.classList.toggle('has-lift', hasFac('elevator'));
+    floor.classList.toggle('has-takeout', hasFac('takeout'));
+    $('floorTabs').hidden = !has2F();
+    document.querySelectorAll('.floor-tab').forEach(b => b.classList.toggle('on', +b.dataset.fl === viewFl));
+    const w = WEATHERS[weatherNow().k];
+    $('weather').hidden = !hasFac('terrace');
+    $('weather').textContent = `${w.icon} ${w.name}${weatherNow().k === 'rain' ? '（テラス席は休み）' : ''}`;
+  }
+
   // 内装（壁と床の決まった場所に飾る）
-  const decorKey = DECOR.map(d => S.decor[d.id] || 0).join(',') + '|' + L.ver;
+  const decorKey = DECOR.map(d => S.decor[d.id] || 0).join(',') + '|' + L.ver + '|' + viewFl;
   const n = id => Math.min(4, S.decor[id] || 0);
   const at = (cls, x, y, html = '', edit = '') => `<div class="${cls}" style="left:${x}%;top:${y}%" ${edit}>${html}</div>`;
   setKeyed($('wallDecor'), 'wallDecor', decorKey, [
@@ -1137,8 +1366,8 @@ function renderFloor() {
     ...(n('chandelier') ? [at('chandelier', 60, 0, '<i></i><i></i><i></i>')] : []),
   ].join(''));
   setKeyed($('floorDecor'), 'floorDecor', decorKey, [
-    ...L.plants.slice(0, n('plant')).map((p, i) => at('plant', p.x, p.y, '🪴', `data-edit="plants" data-i="${i}"`)),
-    ...(n('jukebox') ? [at('record', L.jukebox.x, L.jukebox.y, '📻', 'data-edit="jukebox" data-i="0"')] : []),
+    ...L.plants.slice(0, n('plant')).filter(p => (p.fl || 1) === viewFl).map((p, i) => at('plant', p.x, p.y, '🪴', `data-edit="plants" data-i="${i}"`)),
+    ...(n('jukebox') && viewFl === 1 ? [at('record', L.jukebox.x, L.jukebox.y, '📻', 'data-edit="jukebox" data-i="0"')] : []),
   ].join(''));
 
   // メニュー黒板
@@ -1147,22 +1376,34 @@ function renderFloor() {
     '<b>MENU</b>' + menu.map(d => `<span><i>${d.emoji} ${d.name}</i><em>${yen(d.price)}</em></span>`).join(''));
 }
 
+function setViewFloor(f) {
+  viewFl = f;
+  floor._fkey = null;
+  if (moveFloorMode) setMoveFloorMode(false);
+}
+
 // ===== 配置の編集モード（店内でドラッグして動かす）=====
 let editing = false;
 let drag = null;
+let moveFloorMode = false;   // テーブルを別の階へ移すモード
+function setMoveFloorMode(on) {
+  moveFloorMode = on;
+  $('moveFloorBtn').classList.toggle('on', on);
+  if (on) toast('別の階へ移すテーブルをタップしてください');
+}
 function setEditing(on) {
   editing = on;
   if (on && !S.layout) S.layout = snapshotLayout();
   floor.classList.toggle('editing', on);
   $('editBar').hidden = !on;
   $('editBtn').hidden = on;
-  if (!on) save();
+  if (!on) { setMoveFloorMode(false); save(); }
 }
 function afterLayoutChange() {
   computeLayout();
   keys.floorDecor = undefined;
   // 座っているお客さん・調理中の人を新しい場所へ
-  for (const c of customers) if (c.state === 'wait' || c.state === 'eat') { const p = seatPos(c.table); c.x = p.x; c.y = p.y; }
+  for (const c of customers) if (c.state === 'wait' || c.state === 'eat') { const p = seatPos(c.table); c.x = p.x; c.y = p.y; c.fl = p.fl; }
   for (const s of S.staff) if (s.task?.type === 'cook' && s.task.phase === 'work') { const p = stovePos(s.task.stove); s.x = p.x; s.y = p.y; }
 }
 function pointerSpot(e) {
@@ -1170,10 +1411,11 @@ function pointerSpot(e) {
   return { x: (e.clientX - r.left) / r.width * 100, v: (e.clientY - r.top) / r.width * 100 };
 }
 function layoutItemOf(kind, i) {
-  return kind === 'tables' ? L.tables[i] : kind === 'stoves' ? L.stoves[i] : kind === 'plants' ? L.plants[i] : L.jukebox;
+  return kind === 'tables' ? L.tables[i] : kind === 'vip' ? L.tables[vipIdx()] : kind === 'stoves' ? L.stoves[i]
+    : kind === 'plants' ? L.plants[i] : L.jukebox;
 }
 function setLayoutItem(kind, i, p) {
-  if (kind === 'jukebox') S.layout.jukebox = p; else S.layout[kind][i] = p;
+  if (kind === 'jukebox' || kind === 'vip') S.layout[kind] = p; else S.layout[kind][i] = p;
 }
 function dragEl() {
   return drag && floor.querySelector(`[data-edit="${drag.kind}"][data-i="${drag.i}"]`);
@@ -1184,6 +1426,13 @@ floor.addEventListener('pointerdown', e => {
   if (!el) return;
   e.preventDefault();
   const kind = el.dataset.edit, i = +el.dataset.i;
+  if (moveFloorMode) {
+    if (kind !== 'tables' && kind !== 'vip') return toast('別の階へ移せるのはテーブルだけです');
+    const to = viewFl === 1 ? 2 : 1;
+    if (placeNew(kind, i, to)) { afterLayoutChange(); save(); toast(`🪑 テーブルを${to}階へ移しました`); }
+    else toast(`${to}階に空いている場所がありません`);
+    return;
+  }
   const at = fromFloor(layoutItemOf(kind, i)), pt = pointerSpot(e);
   drag = { kind, i, start: at, dx: at.x - pt.x, dv: at.v - pt.v, bad: false };
   floor.setPointerCapture(e.pointerId);
@@ -1192,7 +1441,7 @@ floor.addEventListener('pointerdown', e => {
 floor.addEventListener('pointermove', e => {
   if (!drag) return;
   const pt = pointerSpot(e);
-  const p = clampLayout(drag.kind, { x: pt.x + drag.dx, v: pt.v + drag.dv });
+  const p = clampLayout(drag.kind, { x: pt.x + drag.dx, v: pt.v + drag.dv, f: drag.start.f });
   drag.bad = layoutHits(drag.kind, drag.i, p);
   setLayoutItem(drag.kind, drag.i, p);
   afterLayoutChange();
@@ -1269,14 +1518,14 @@ function renderCook(el) {
     <div class="counter-line">${S.counter.length
       ? S.counter.map(c => `<span class="chip">${DISH[c.dish].emoji} ${DISH[c.dish].name} ×${c.n}</span>`).join('')
       : '<span class="chip">まだありません</span>'}</div>
-    <h3>コンロ（${S.stoves.length}/${stoveCap()}）</h3>
+    <h3>コンロ（${normalStoves()}/${stoveCap()}）${facCount('prep') ? `・仕込み設備（${facCount('prep')}）` : ''}</h3>
     <p class="note">料理を注文すると、手の空いたスタッフがコンロに入って調理します。調理中のスタッフは配膳できません。
     できあがったらタップしてカウンターに並べましょう。</p>
     <div class="stoves">${S.stoves.map((st, i) => {
       const s = infos[i];
       if (s.kind === 'idle') {
         return `<button class="stove idle" data-action="pick" data-i="${i}">
-          <div class="big">🔥</div>コンロ${i + 1}<span>タップして料理を作る</span></button>`;
+          <div class="big">${st.prep ? '🍲' : '🔥'}</div>${stoveName(i)}<span>タップして料理を作る</span></button>`;
       }
       const d = DISH[st.dish];
       if (s.kind === 'ready') {
@@ -1311,7 +1560,7 @@ function staffStatus(s) {
 }
 
 function renderStaff(el) {
-  const key = [S.staff.map(s => s.id + s.type + s.post + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), permCount(), permSlots(), staffCap(), S.drinks].join('|');
+  const key = [S.staff.map(s => s.id + s.type + s.post + (s.fpost || '') + (s.away || '') + !!s.rest + (hpOf(s) >= maxHp(s))).join(','), permCount(), permSlots(), staffCap(), S.drinks].join('|');
   setKeyed(el, 'staff', key, `
     <h3>スタッフ（${S.staff.length}/${staffCap()}人）　📜 正社員の枠 ${permCount()}/${permSlots()}</h3>
     <p class="note">お客さんをタップするとアルバイトとしてスカウトできます。アルバイトは契約期間（${fmtTime(CONTRACT_SEC)}）が過ぎると辞めてしまいます。
@@ -1332,6 +1581,8 @@ function renderStaff(el) {
             <div class="sub" data-contract-left="${s.id}"></div>` : ''}
           <div class="posts">${Object.entries(POSTS).map(([p, label]) =>
             `<button class="post-btn ${s.post === p ? 'on' : ''}" data-action="post" data-id="${s.id}" data-post="${p}">${label}</button>`).join('')}</div>
+          ${has2F() ? `<div class="posts">${Object.entries(FLOOR_POSTS).map(([f, label]) =>
+            `<button class="post-btn ${(s.fpost || 'any') === f ? 'on' : ''}" data-action="fpost" data-id="${s.id}" data-f="${f}">${label}</button>`).join('')}</div>` : ''}
         </div>
         <div class="staff-actions">
           ${s.type === 'part'
@@ -1366,8 +1617,9 @@ function itemRow(ico, name, sub, price, action, extra, disabled, label) {
 
 function renderShop(el) {
   const sp = stovePrice(), tp = tablePrice();
-  const stoveMax = S.stoves.length >= stoveCap(), tableMax = S.tableCount >= tableCap();
-  const key = [sp, tp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(),
+  const stoveMax = normalStoves() >= stoveCap(), tableMax = S.tableCount >= tableCap();
+  const key = [sp, tp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(), S.rank, JSON.stringify(S.fac),
+    ...FACILITIES.map(f => S.money >= facPrice(f)),
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
     ...Object.keys(UPGRADES).map(k => S.money >= upPrice(k)),
     S.money >= sp, S.money >= tp, S.drinks, S.money >= drinkPrice()].join('|');
@@ -1375,10 +1627,20 @@ function renderShop(el) {
   setKeyed(el, 'shop', key, `
     <h3>設備</h3>
     <div class="item-list">
-      ${itemRow('🔥', 'コンロを増やす', `いま ${S.stoves.length}/${stoveCap()} 台`, sp, 'buy', 'data-kind="stove"',
+      ${itemRow('🔥', 'コンロを増やす', `いま ${normalStoves()}/${stoveCap()} 台`, sp, 'buy', 'data-kind="stove"',
         stoveMax || S.money < sp, stoveMax ? '上限' : '')}
       ${itemRow('🪑', 'テーブルを増やす', `いま ${S.tableCount}/${tableCap()} 卓`, tp, 'buy', 'data-kind="table"',
         tableMax || S.money < tp, tableMax ? '上限' : '')}
+    </div>
+    <h3>🏗️ 施設（増築）</h3>
+    <div class="item-list">
+      ${FACILITIES.map(f => {
+        const n = facCount(f.id), max = facMax(f), locked = S.rank < f.rank, done = n >= max;
+        return itemRow(f.icon, `${f.name}${n ? ` <small>${n}/${max}</small>` : ''}`,
+          locked ? `${RANKS[f.rank].icon} ${RANKS[f.rank].name}で作れます` : f.desc,
+          facPrice(f), 'buy', `data-kind="fac" data-id="${f.id}"`, locked || done || S.money < facPrice(f),
+          locked ? '🔒' : done ? '完成' : '');
+      }).join('')}
     </div>
     <h3>設備強化</h3>
     <div class="item-list">
@@ -1650,10 +1912,11 @@ function openWelcome(rep) {
 
 function openDishPicker(i) {
   if (S.stoves[i]?.dish) return;
+  const prep = !!S.stoves[i].prep;
   openModal(`
-    <h2>🔥 コンロ${i + 1}：何を作りますか？</h2>
-    <p class="note">材料費を払うと、手の空いたスタッフが調理を始めます。</p>
-    <div class="dish-list">${DISHES.filter(d => !d.secret || canCook(d)).map(d => {
+    <h2>${prep ? '🍲' : '🔥'} ${stoveName(i)}：何を作りますか？</h2>
+    <p class="note">材料費を払うと、手の空いたスタッフが調理を始めます。${prep ? '仕込み設備では、何時間もかけて大量に作る料理を作れます。仕込みの間も担当のスタッフが付きます。' : ''}</p>
+    <div class="dish-list">${DISHES.filter(d => !!d.long === prep && (!d.secret || canCook(d))).map(d => {
       const locked = !canCook(d);
       return `<div class="row ${locked ? 'locked' : ''}">
         <div class="ico">${d.emoji}</div>
@@ -1704,6 +1967,7 @@ function openHelp() {
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
       <li>カフェ画面右上の<b>🛠 配置</b>で、テーブル・コンロ・観葉植物などをドラッグして好きな場所へ動かせます。</li>
+      <li>ランクが上がると<b>敷地</b>が広がり、ランク6で<b>2階</b>ができます（左上の「1F／2F」で切り替え）。ショップの<b>🏗️ 施設</b>で、テイクアウト窓口・仕込み設備（何時間もかけて大量に作る料理）・個室（VIP）・テラス席・エレベーターを増築できます。</li>
       <li>スタッフは<b>能力</b>（💪体力・🍳調理・🏃配膳・🤝忠誠度）をそれぞれ★1〜5で持ち、合計から総合評価（C〜SS）が決まります。<b>体力</b>は★1つにつき1日働ける分（店長は無限）。忠誠度が高いほど休憩からの復帰が速く、激励やドリンクへの不満も溜まりにくくなります。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
@@ -1767,10 +2031,12 @@ document.addEventListener('click', e => {
     return;
   }
   // 配置の編集中は、店内の物をタップしても反応しない（ドラッグで動かす）
-  if (editing && floor.contains(el) && !['editDone', 'layoutReset'].includes(el.dataset.action)) return;
+  if (editing && floor.contains(el) && !['editDone', 'layoutReset', 'viewFloor', 'moveFloor'].includes(el.dataset.action)) return;
   const d = el.dataset;
   switch (d.action) {
     case 'editLayout': setEditing(true); break;
+    case 'viewFloor': setViewFloor(+d.fl); break;
+    case 'moveFloor': setMoveFloorMode(!moveFloorMode); break;
     case 'editDone': setEditing(false); break;
     case 'layoutReset': resetLayout(); break;
     case 'screen': closeModal(); setScreen(d.screen); break;
@@ -1782,6 +2048,7 @@ document.addEventListener('click', e => {
     case 'hire': hire(+d.cid); break;
     case 'promote': promote(+d.id); break;
     case 'post': setPost(+d.id, d.post); break;
+    case 'fpost': setFloorPost(+d.id, d.f); break;
     case 'rankup': rankUp(); break;
     case 'gotoRank': closeModal(); setScreen('kitchen'); setKitchenTab('rank'); break;
     case 'upgrade': upgrade(d.kind); break;

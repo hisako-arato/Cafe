@@ -41,6 +41,14 @@
           </div>
           <button id="restDoor" class="rest-door" data-action="restRoom" aria-label="休憩室"></button>
           <div class="kitchen-floor"><span class="zone-label">🍳 厨房</span></div>
+          <div class="outside"></div>
+          <div class="front-wall"></div>
+          <div class="takeout-win"><b>TAKE OUT</b></div>
+          <div class="floor2"><span class="zone-label">🪜 2F 客席</span></div>
+          <div class="stairs s1" aria-hidden="true"><b>🪜 2Fへ</b></div>
+          <div class="stairs s2" aria-hidden="true"><b>🪜 1Fへ</b></div>
+          <div class="lift s1" aria-hidden="true">🛗</div>
+          <div class="lift s2" aria-hidden="true">🛗</div>
           <div id="wallDecor"></div>
           <div id="counter" class="counter"></div>
           <div id="staffGate" class="staff-gate"><i></i><i></i><b>STAFF</b></div>
@@ -48,9 +56,15 @@
           <div id="floorDecor"></div>
           <div class="door"><span class="open-sign">OPEN</span></div>
           <button id="editBtn" class="edit-btn" data-action="editLayout">🛠 配置</button>
+          <div id="floorTabs" class="floor-tabs" hidden>
+            <button class="floor-tab on" data-action="viewFloor" data-fl="1">1F</button>
+            <button class="floor-tab" data-action="viewFloor" data-fl="2">2F</button>
+          </div>
+          <div id="weather" class="weather-chip" hidden></div>
           <div id="editBar" class="edit-bar" hidden>
             <span>🛠 配置を編集中：テーブル・コンロ・観葉植物などをドラッグ</span>
             <button class="btn ghost small" data-action="layoutReset">↺ 最初の配置</button>
+            <button id="moveFloorBtn" class="btn ghost small move-floor" data-action="moveFloor">⇅ 別の階へ</button>
             <button class="btn small" data-action="editDone">✓ 完了</button>
           </div>
           <div class="log-window">

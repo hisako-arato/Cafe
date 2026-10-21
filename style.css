@@ -367,17 +367,18 @@ button {
 
 /* 入口 */
 .door {
-  position: absolute; right: 1.5%; bottom: 0;
-  width: 10cqw; height: 15cqw;
-  background:
-    linear-gradient(90deg, transparent 15%, rgba(190, 230, 255, .75) 15% 85%, transparent 85%) 0 2cqw / 100% 5cqw no-repeat,
-    linear-gradient(#8a5a36, #6b4428);
-  border: 2px solid #2b1d33; border-bottom: 0;
+  /* 正面の入口（壁の切れ目にある扉の枠） */
+  position: absolute; left: 90%; transform: translateX(-50%);
+  top: calc(var(--front-y, 90%) - 11cqw);
+  width: 10cqw; height: 12.5cqw;
+  border: 1cqw solid #6b4428; border-bottom: 0;
   border-radius: 1.5cqw 1.5cqw 0 0;
-  z-index: 2;
+  background: linear-gradient(rgba(255,255,255,.08), rgba(255,255,255,0));
+  z-index: var(--front-z, 90);
+  pointer-events: none;
 }
 .open-sign {
-  position: absolute; left: 50%; top: 8cqw; transform: translateX(-50%);
+  position: absolute; left: 50%; top: -1cqw; transform: translateX(-50%);
   background: #fff7e6; color: #b91c1c; border: 1.5px solid #2b1d33;
   font-size: 1.5cqw; font-weight: 900; padding: 0 .8cqw; border-radius: .6cqw;
 }
@@ -1134,3 +1135,91 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .grade-badge.gA { background: #3b82f6; }
 .grade-badge.gS { background: linear-gradient(90deg, #f59e0b, #ec4899); }
 .grade-badge.gSS { background: linear-gradient(90deg, #a855f7, #ec4899, #f59e0b); }
+
+/* 店の外（正面の壁より手前）。ランクが上がると壁が外へ広がる */
+.outside {
+  position: absolute; left: 0; right: 0; top: var(--front-y, 90%); bottom: 0; z-index: 0;
+  background:
+    linear-gradient(rgba(0,0,0,.18), transparent 2cqw),
+    repeating-linear-gradient(90deg, #cfd4da 0 8cqw, #c3c9d0 8cqw 8.3cqw),
+    #cfd4da;
+}
+.outside::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 30%;
+  background: repeating-linear-gradient(90deg, #4b5563 0 10cqw, #f8fafc 10cqw 16cqw, #4b5563 16cqw 26cqw);
+  background-size: 100% .8cqw; background-repeat: no-repeat; background-position: 0 50%;
+  background-color: #4b5563; opacity: .9;
+}
+.front-wall {
+  position: absolute; left: 0; right: 0; top: calc(var(--front-y, 90%) - 2.2cqw); height: 2.6cqw;
+  background: linear-gradient(90deg, #8a5a36 0 85%, transparent 85% 95%, #8a5a36 95%);
+  border-top: 2px solid #2b1d33;
+  z-index: var(--front-z, 90);
+  pointer-events: none;
+}
+.takeout-win {
+  display: none; position: absolute; left: var(--window-x, 70%); transform: translateX(-50%);
+  top: calc(var(--front-y, 90%) - 7cqw); width: 13cqw; height: 6.5cqw;
+  background: linear-gradient(#bae6fd, #e0f2fe); border: .8cqw solid #6b4428; border-radius: 1cqw;
+  z-index: var(--front-z, 90); pointer-events: none;
+}
+.takeout-win b {
+  position: absolute; left: 50%; top: -1.6cqw; transform: translateX(-50%); white-space: nowrap;
+  font-size: 1.5cqw; background: #f97316; color: #fff; border-radius: .5cqw; padding: 0 .8cqw;
+}
+#floor.has-takeout .takeout-win { display: block; }
+
+/* 2階 */
+.floor2 {
+  display: none; position: absolute; left: 0; right: 0; top: 17cqw; bottom: 0; z-index: 1;
+  background:
+    linear-gradient(rgba(0,0,0,.16), transparent 3cqw),
+    repeating-linear-gradient(90deg, #c9a27a 0 12cqw, #b88f66 12cqw 12.3cqw),
+    #c9a27a;
+}
+.floor2 .zone-label { top: 1.5cqw; bottom: auto; left: auto; right: 1.5%; }
+#floor.view2 .floor2 { display: block; }
+#floor.view2 .kitchen-floor, #floor.view2 .counter, #floor.view2 .staff-gate, #floor.view2 .counter-end,
+#floor.view2 .rest-door, #floor.view2 .door, #floor.view2 .outside, #floor.view2 .front-wall,
+#floor.view2 .takeout-win, #floor.view2 #floorDecor { display: none !important; }
+.stairs, .lift { display: none; position: absolute; transform: translate(-50%, -100%); pointer-events: none; }
+.stairs {
+  left: 5%; width: 8cqw; height: 8cqw; z-index: 5;
+  background: repeating-linear-gradient(#a8743f 0 1.4cqw, #6b4428 1.4cqw 1.8cqw);
+  border: 2px solid #2b1d33; border-radius: .6cqw;
+}
+.stairs b { position: absolute; left: 50%; top: -2.4cqw; transform: translateX(-50%); white-space: nowrap;
+  font-size: 1.5cqw; background: rgba(43,29,51,.75); color: #fff; border-radius: .6cqw; padding: 0 .8cqw; }
+.stairs.s1 { top: var(--stairs1-y); }
+.stairs.s2 { top: var(--stairs2-y); }
+.lift { left: 13%; font-size: 4cqw; z-index: 6; }
+.lift.s1 { top: var(--stairs1-y); }
+.lift.s2 { top: var(--stairs2-y); }
+#floor.has2f:not(.view2) .stairs.s1, #floor.view2 .stairs.s2 { display: block; }
+#floor.has-lift:not(.view2) .lift.s1, #floor.has-lift.view2 .lift.s2 { display: block; }
+.floor-tabs { position: absolute; left: 1.5%; top: 1cqw; z-index: 450; display: flex; gap: 4px; }
+.floor-tabs[hidden] { display: none; }
+.floor-tab {
+  font-size: 2.4cqw; font-weight: 900; color: #fff; padding: .4cqw 1.6cqw; border-radius: 99px;
+  background: rgba(43,29,51,.6); border: 1.5px solid rgba(255,255,255,.8);
+}
+.floor-tab.on { background: #f97316; }
+#floor.editing .floor-tabs { top: auto; bottom: 18%; }
+.weather-chip {
+  position: absolute; right: 1.5%; top: 6cqw; z-index: 450; font-size: 2.2cqw; font-weight: 800;
+  background: rgba(255,255,255,.85); border: 1.5px solid #2b1d33; border-radius: 99px; padding: .3cqw 1.2cqw;
+}
+.weather-chip[hidden] { display: none; }
+#floor:not(.has2f) .move-floor { display: none; }
+.move-floor.on { background: #f97316; color: #fff; }
+
+/* 個室・テラス席・VIP・テイクアウト */
+.table.vip::before {
+  content: "個室"; position: absolute; left: 50%; top: -5.5cqw; transform: translateX(-50%);
+  width: 20cqw; height: 4cqw; border-radius: 1cqw 1cqw 0 0;
+  background: repeating-linear-gradient(90deg, #7c2d12 0 1cqw, #9a3412 1cqw 2cqw);
+  border: 2px solid #2b1d33; color: #fde68a; font-size: 1.8cqw; font-weight: 900; display: grid; place-items: center;
+}
+.table.closed { opacity: .45; filter: grayscale(.7); }
+.person.vip .sprite { filter: drop-shadow(0 0 .35cqw #fff) drop-shadow(0 0 1.2cqw #fbbf24); }
+.person.takeout { pointer-events: none; }
