@@ -1259,3 +1259,5 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .stat-row .k { font-weight: 800; }
 .stat-row small { color: var(--muted); font-size: .7rem; line-height: 1.35; }
 .actions.wrap { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+.stoves.prep .stove { background: #fff7ed; border-color: #fdba74; }
+.stove-unit.prep { background: linear-gradient(#fed7aa, #f59e0b); }

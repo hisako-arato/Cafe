@@ -25,20 +25,20 @@ const RANKS = [
   { name: '有名店',           icon: '🏛️', stoves: 6, tables: 10, staff: 9,  perm: 7, cost: 25000, need: { level: 15, served: 1200, perm: 5 } },
   { name: '2階席のある名店', icon: '🏰', stoves: 8, tables: 12, staff: 11, perm: 8, cost: 70000, need: { level: 20, served: 3000, perm: 7 } },
   // 第2章（首都圏）：2号店・3号店を出す。スタッフの上限は店ごと、正社員の枠は会社全体。chapter は前の章の制覇が条件
-  { name: '首都圏デビュー',     icon: '🚃', stoves: 8, tables: 12, staff: 11, perm: 10, shops: 2, cost: 150000,  need: { level: 24, served: 5000,   perm: 8,  chapter: 1 } },
-  { name: 'テレビで話題の店',   icon: '📺', stoves: 8, tables: 12, staff: 11, perm: 12, shops: 2, cost: 300000,  need: { level: 28, served: 8000,   perm: 10 } },
-  { name: '3店舗のチェーン',    icon: '🏬', stoves: 8, tables: 12, staff: 11, perm: 14, shops: 3, cost: 600000,  need: { level: 32, served: 12000,  perm: 12 } },
-  { name: '首都圏の名門',       icon: '🗼', stoves: 8, tables: 12, staff: 11, perm: 16, shops: 3, cost: 1000000, need: { level: 36, served: 18000,  perm: 14 } },
-  // 第3章（アジア）
-  { name: 'アジア進出',         icon: '✈️', stoves: 8, tables: 12, staff: 11, perm: 18, shops: 3, cost: 2000000,  need: { level: 40, served: 25000,  perm: 16, chapter: 2 } },
-  { name: 'アジアの人気店',     icon: '🏮', stoves: 8, tables: 12, staff: 11, perm: 20, shops: 3, cost: 3500000,  need: { level: 44, served: 33000,  perm: 18 } },
-  { name: 'アジアの名門',       icon: '🏯', stoves: 8, tables: 12, staff: 11, perm: 22, shops: 3, cost: 5000000,  need: { level: 48, served: 42000,  perm: 20 } },
-  { name: 'アジアの覇者',       icon: '🐉', stoves: 8, tables: 12, staff: 11, perm: 24, shops: 3, cost: 8000000,  need: { level: 52, served: 52000,  perm: 22 } },
+  { name: '首都圏デビュー',     icon: '🚃', stoves: 8, tables: 12, staff: 11, perm: 10, shops: 2, cost: 150000,   need: { level: 24, served: 4000,  perm: 8,  chapter: 1 } },
+  { name: 'テレビで話題の店',   icon: '📺', stoves: 8, tables: 12, staff: 11, perm: 12, shops: 2, cost: 300000,   need: { level: 28, served: 6000,  perm: 10 } },
+  { name: '3店舗のチェーン',    icon: '🏬', stoves: 8, tables: 12, staff: 11, perm: 14, shops: 3, cost: 600000,   need: { level: 32, served: 8500,  perm: 12 } },
+  { name: '首都圏の名門',       icon: '🗼', stoves: 8, tables: 12, staff: 11, perm: 16, shops: 3, cost: 1000000,  need: { level: 36, served: 11000, perm: 14 } },
+  // 第3章（アジア）：フランチャイズ（franchise は加盟店の上限）
+  { name: 'アジア進出',         icon: '✈️', stoves: 8, tables: 12, staff: 11, perm: 18, shops: 3, franchise: 2,  cost: 2000000,  need: { level: 40, served: 14000, perm: 16, chapter: 2 } },
+  { name: 'アジアの人気店',     icon: '🏮', stoves: 8, tables: 12, staff: 11, perm: 20, shops: 3, franchise: 4,  cost: 3500000,  need: { level: 44, served: 17000, perm: 18 } },
+  { name: 'アジアの名門',       icon: '🏯', stoves: 8, tables: 12, staff: 11, perm: 22, shops: 3, franchise: 6,  cost: 5000000,  need: { level: 48, served: 20000, perm: 20 } },
+  { name: 'アジアの覇者',       icon: '🐉', stoves: 8, tables: 12, staff: 11, perm: 24, shops: 3, franchise: 8,  cost: 8000000,  need: { level: 52, served: 24000, perm: 22 } },
   // 第4章（世界）
-  { name: '世界進出',           icon: '🌍', stoves: 8, tables: 12, staff: 11, perm: 26, shops: 3, cost: 12000000, need: { level: 56, served: 65000,  perm: 24, chapter: 3 } },
-  { name: '世界の人気店',       icon: '🗽', stoves: 8, tables: 12, staff: 11, perm: 28, shops: 3, cost: 18000000, need: { level: 60, served: 80000,  perm: 26 } },
-  { name: '世界の名門',         icon: '🏆', stoves: 8, tables: 12, staff: 11, perm: 30, shops: 3, cost: 25000000, need: { level: 64, served: 100000, perm: 28 } },
-  { name: '世界一のカフェ',     icon: '🌟', stoves: 8, tables: 12, staff: 11, perm: 32, shops: 3, cost: 40000000, need: { level: 68, served: 125000, perm: 30 } },
+  { name: '世界進出',           icon: '🌍', stoves: 8, tables: 12, staff: 11, perm: 26, shops: 3, franchise: 10, cost: 8000000,  need: { level: 56, served: 28000, perm: 24, chapter: 3 } },
+  { name: '世界の人気店',       icon: '🗽', stoves: 8, tables: 12, staff: 11, perm: 28, shops: 3, franchise: 12, cost: 12000000, need: { level: 60, served: 33000, perm: 26 } },
+  { name: '世界の名門',         icon: '🏆', stoves: 8, tables: 12, staff: 11, perm: 30, shops: 3, franchise: 14, cost: 18000000, need: { level: 64, served: 38000, perm: 28 } },
+  { name: '世界一のカフェ',     icon: '🌟', stoves: 8, tables: 12, staff: 11, perm: 32, shops: 3, franchise: 16, cost: 25000000, need: { level: 68, served: 45000, perm: 30 } },
 ];
 
 // 設備強化（上限は店舗ランク + 1、最大 Lv6）
@@ -343,6 +343,7 @@ function save() {
     town: undefined,   // いま見ている地域の街（S.towns の中を指しているだけ）
     staff: staffToSave(S.staff),
     shopData: Object.fromEntries(Object.entries(S.shopData || {}).map(([k, d]) => [k, { ...d, staff: staffToSave(d.staff) }])),
+    franchises: (S.franchises || []).map(f => ({ ...f, staff: staffToSave([f.staff])[0] })),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 保存できない環境では無視 */ }
 }
@@ -373,6 +374,7 @@ function applyOffline(resume = false) {
 
   const level0 = S.level;
   let xp = 0;
+  rep.franchise = payFranchises(now);
   // すべての店を営業する（表示していない店は、店長代理がいるときだけ）
   forEachShop(i => { xp += runBusiness(since, total, rep, shopCanRun(i), shopLabel(i)); });
   quietToasts = true;
@@ -587,6 +589,57 @@ function shopTick(dt) {
   for (const d of rep.done) addLog(`${DISH[d.dish].emoji} ${d.shop}で${DISH[d.dish].name}ができあがり、${d.n}人前を並べました`);
 }
 
+// ===== フランチャイズ（第3〜4章）=====
+// 加盟店は直接操作しない。正社員を店長として送り出すと、その人の能力に応じて売上の一部が入り続ける
+const FRANCHISE = {
+  asia:  { price: 500000,  perHour: 40000 },
+  world: { price: 3000000, perHour: 100000 },
+};
+const franchiseMax = () => rankOf().franchise || 0;
+const franchiseRate = f => Math.round(FRANCHISE[f.region].perHour * powerOf(f.staff) / 3);
+const franchiseRegions = () => Object.keys(FRANCHISE).filter(id => REGION[id] && regionOpen(REGION[id]));
+function openFranchise(region, staffId) {
+  const fr = FRANCHISE[region], s = S.staff.find(x => x.id === staffId);
+  if (!fr || !franchiseRegions().includes(region) || (S.franchises || []).length >= franchiseMax() || S.money < fr.price) return;
+  if (!s || s.owner || s.type !== 'perm' || s.away) return;
+  const used = new Set((S.franchises || []).map(f => f.city));
+  const city = REGION[region].cities.find(c => !used.has(c)) || `${REGION[region].name}${(S.franchises || []).length + 1}`;
+  S.money -= fr.price;
+  cancelTaskOf(s);
+  S.staff.splice(S.staff.indexOf(s), 1);
+  if (S.shops[S.shopIdx].manager === s.id) S.shops[S.shopIdx].manager = null;
+  s.task = null; s.rest = false; s.inRoom = false;
+  S.franchises = [...(S.franchises || []), { id: Date.now(), region, city, staff: s, paidAt: Date.now() }];
+  toast(`🌏 フランチャイズ「永久雇用カフェ ${city}店」が開店！ 店長は${displayName(s)}（売上 ${yen(franchiseRate(S.franchises.at(-1)))}／時）`, true);
+  closeModal();
+  save();
+}
+// 加盟店をたたむと、店長はいま表示している店に戻る
+function closeFranchise(id) {
+  const f = (S.franchises || []).find(x => x.id === id);
+  if (!f || S.staff.length >= staffCap()) return;
+  payFranchises();
+  S.franchises = S.franchises.filter(x => x !== f);
+  f.staff.x = L.door.x; f.staff.y = L.door.y; f.staff.fl = 1;
+  S.staff.push(f.staff);
+  toast(`🏁 「${f.city}店」をたたみました。${displayName(f.staff)}が戻ってきました`);
+  save();
+}
+// 売上の一部を受け取る（たまった時間の分）。受け取った金額を返す
+function payFranchises(now = Date.now()) {
+  let sum = 0;
+  for (const f of S.franchises || []) {
+    const got = franchiseRate(f) * Math.max(0, now - f.paidAt) / 3600000;
+    f.paidAt = now;
+    f.earned = (f.earned || 0) + got;
+    sum += got;
+  }
+  sum = Math.floor(sum);
+  S.money += sum;
+  return sum;
+}
+let franchiseTimer = 0;
+
 // ===== 計算 =====
 // 名店の証（第2章以降の名店に勝つと手に入る）1つにつき人気度 +5
 const popularity = () => DECOR.reduce((sum, d) => sum + (S.decor[d.id] || 0) * d.pop, 0) + (S.trophies || []).length * 5;
@@ -611,7 +664,7 @@ const tablePrice = () => Math.round(120 * Math.pow(1.7, S.tableCount - 2));
 const decorPrice = d => Math.round(d.price * Math.pow(1.25, S.decor[d.id] || 0));
 const permSlots = () => rankOf().perm;
 // すべての店のスタッフ（表示していない2号店・3号店を含む）
-const allStaff = () => [...S.staff, ...Object.values(S.shopData || {}).flatMap(d => d.staff)];
+const allStaff = () => [...S.staff, ...Object.values(S.shopData || {}).flatMap(d => d.staff), ...(S.franchises || []).map(f => f.staff)];
 // 施設：ランクの条件を満たし、まだ上限まで作っていないか
 const facMax = f => f.max ? f.max(S.rank) : 1;
 const facAvailable = f => S.rank >= f.rank && facCount(f.id) < facMax(f);
@@ -1732,6 +1785,25 @@ function renderHud() {
   $('rankName').classList.toggle('ready', rankReady);
 }
 
+// 調理タブのコンロ（仕込み設備）1台分
+function stoveCard(st, i, s) {
+  if (s.kind === 'idle') {
+    return `<button class="stove idle" data-action="pick" data-i="${i}">
+      <div class="big">${st.prep ? '🍲' : '🔥'}</div>${stoveName(i)}<span>タップして料理を作る</span></button>`;
+  }
+  const d = DISH[st.dish];
+  if (s.kind === 'ready') {
+    return `<button class="stove ready" data-action="collect" data-i="${i}">
+      <div class="big">${d.emoji}</div>できあがり！<span>タップでカウンターへ（${servingsOf(d)}人前）</span></button>`;
+  }
+  const who = s.kind === 'cooking' ? `${displayName(s.cook)}が調理中`
+    : s.cook ? `${displayName(s.cook)}が向かっています` : '調理スタッフ待ち…';
+  return `<div class="stove ${s.kind}">
+    <div class="stove-head">${s.cook ? card(s.cook, roleOf(s.cook)) : ''}<div class="big">${d.emoji}</div></div>
+    ${d.name}<div class="bar"><i data-prog="${i}"></i></div>
+    <span>${who}</span><span data-left="${i}"></span></div>`;
+}
+
 function renderCook(el) {
   const infos = S.stoves.map((_, i) => stoveInfo(i));
   const key = S.stoves.map((st, i) => [infos[i].kind, st.dish, infos[i].cook?.id].join(':')).join(',');
@@ -1741,27 +1813,13 @@ function renderCook(el) {
     <div class="counter-line">${S.counter.length
       ? S.counter.map(c => `<span class="chip">${DISH[c.dish].emoji} ${DISH[c.dish].name} ×${c.n}</span>`).join('')
       : '<span class="chip">まだありません</span>'}</div>
-    <h3>コンロ（${normalStoves()}/${stoveCap()}）${facCount('prep') ? `・仕込み設備（${facCount('prep')}）` : ''}</h3>
+    <h3>🔥 コンロ（${normalStoves()}/${stoveCap()}）</h3>
     <p class="note">料理を注文すると、手の空いたスタッフがコンロに入って調理します。調理中のスタッフは配膳できません。
     できあがったらタップしてカウンターに並べましょう。</p>
-    <div class="stoves">${S.stoves.map((st, i) => {
-      const s = infos[i];
-      if (s.kind === 'idle') {
-        return `<button class="stove idle" data-action="pick" data-i="${i}">
-          <div class="big">${st.prep ? '🍲' : '🔥'}</div>${stoveName(i)}<span>タップして料理を作る</span></button>`;
-      }
-      const d = DISH[st.dish];
-      if (s.kind === 'ready') {
-        return `<button class="stove ready" data-action="collect" data-i="${i}">
-          <div class="big">${d.emoji}</div>できあがり！<span>タップでカウンターへ（${servingsOf(d)}人前）</span></button>`;
-      }
-      const who = s.kind === 'cooking' ? `${displayName(s.cook)}が調理中`
-        : s.cook ? `${displayName(s.cook)}が向かっています` : '調理スタッフ待ち…';
-      return `<div class="stove ${s.kind}">
-        <div class="stove-head">${s.cook ? card(s.cook, roleOf(s.cook)) : ''}<div class="big">${d.emoji}</div></div>
-        ${d.name}<div class="bar"><i data-prog="${i}"></i></div>
-        <span>${who}</span><span data-left="${i}"></span></div>`;
-    }).join('')}</div>`);
+    <div class="stoves">${S.stoves.map((st, i) => st.prep ? '' : stoveCard(st, i, infos[i])).join('')}</div>
+    ${facCount('prep') ? `<h3>🍲 仕込み設備（${facCount('prep')}台）</h3>
+    <p class="note">何時間もかけて大量に作る料理（長時間料理）専用です。仕込みの間も担当のスタッフが付きます。</p>
+    <div class="stoves prep">${S.stoves.map((st, i) => st.prep ? stoveCard(st, i, infos[i]) : '').join('')}</div>` : ''}`);
   infos.forEach((s, i) => {
     if (s.kind !== 'cooking' && s.kind !== 'waiting') return;
     const bar = el.querySelector(`[data-prog="${i}"]`);
@@ -1848,7 +1906,8 @@ function itemRow(ico, name, sub, price, action, extra, disabled, label) {
 function renderShop(el) {
   const sp = stovePrice(), tp = tablePrice();
   const stoveMax = normalStoves() >= stoveCap(), tableMax = S.tableCount >= tableCap();
-  const key = [sp, tp, stoveMax, tableMax, S.up.stove, S.up.table, upMax(), S.rank, JSON.stringify(S.fac), S.shopIdx, JSON.stringify(S.shops),
+  const key = [sp, tp, stoveMax, tableMax, JSON.stringify((S.franchises || []).map(f => [f.id, f.staff.id, Math.floor((f.earned || 0) / 1000)])), franchiseMax(),
+    ...Object.values(FRANCHISE).map(f => S.money >= f.price), S.up.stove, S.up.table, upMax(), S.rank, JSON.stringify(S.fac), S.shopIdx, JSON.stringify(S.shops),
     Object.values(S.shopData).map(d => d.staff.length).join(','), S.money >= (SHOP_PRICES[shopCount()] || Infinity),
     ...FACILITIES.map(f => S.money >= facPrice(f)),
     ...DECOR.map(d => decorPrice(d) + ':' + (S.money >= decorPrice(d))),
@@ -1874,6 +1933,17 @@ function renderShop(el) {
           ${i === S.shopIdx ? '' : `<button class="btn ghost" data-action="shop" data-i="${i}">表示する</button>`}</div>`;
       }).join('')}
       ${shopCount() < shopMax() ? itemRow('🏗️', `${shopCount() + 1}号店を出す`, '首都圏に新しい店を出します（コンロ2台・テーブル2卓から）', SHOP_PRICES[shopCount()], 'openShop', '', S.money < SHOP_PRICES[shopCount()]) : ''}
+    </div>` : ''}
+    ${franchiseMax() || (S.franchises || []).length ? `<h3>🌏 フランチャイズ（${(S.franchises || []).length}/${franchiseMax()}店）</h3>
+    <p class="note">加盟店は直接操作しません。正社員を店長として送り出すと、その人の能力（総合力）に応じて売上の一部が入り続けます（留守中も）。たたむと店長はいま表示している店に戻ります。</p>
+    <div class="item-list">
+      ${(S.franchises || []).map(f => `<div class="row"><div class="ico">${REGION[f.region].icon}</div>
+        <div class="info"><div class="name">永久雇用カフェ ${f.city}店</div>
+          <div class="sub">店長 ${displayName(f.staff)}（総合 ${gradeOf(f.staff)}）・${yen(franchiseRate(f))}／時・これまで ${yen(Math.floor(f.earned || 0))}</div></div>
+        <button class="btn ghost small" data-action="closeFranchise" data-id="${f.id}" ${S.staff.length >= staffCap() ? 'disabled' : ''}>たたむ</button></div>`).join('')}
+      ${(S.franchises || []).length < franchiseMax() ? franchiseRegions().map(r => itemRow(REGION[r].icon, `${REGION[r].name}に出店する`,
+        `売上 ${yen(FRANCHISE[r].perHour)}／時（店長の総合力 ★3 のとき）`, FRANCHISE[r].price, 'askFranchise', `data-region="${r}"`,
+        S.money < FRANCHISE[r].price)).join('') : ''}
     </div>` : ''}
     <h3>🏗️ 施設（増築）</h3>
     <div class="item-list">
@@ -2225,6 +2295,7 @@ function updateHpBars(root) {
 // 閉じていた間の報告
 function openWelcome(rep) {
   const items = [
+    ...(rep.franchise ? [`<li class="good">🌏 フランチャイズの売上 <b>${yen(rep.franchise)}</b> が入りました</li>`] : []),
     ...(rep.served ? [`<li class="good">🍽️ 留守中も営業して <b>${rep.served.toLocaleString('ja-JP')}人</b>を接客し、<b>${yen(rep.sales)}</b> の売上がありました</li>`] : []),
     ...(rep.level ? [`<li class="good">🎉 店長レベル${rep.level[0]} → <b>${rep.level[1]}</b>になりました！</li>`] : []),
     ...(rep.soldOut ? ['<li class="bad">🈳 カウンターの料理が売り切れて、途中で閉店しました。出かける前に多めに作っておきましょう</li>'] : []),
@@ -2308,6 +2379,7 @@ function openHelp() {
       <li>カフェ画面右上の<b>🛠 配置</b>で、テーブル・コンロ・観葉植物などをドラッグして好きな場所へ動かせます。</li>
       <li>ランクが上がると<b>敷地</b>が広がり、ランク6で<b>2階</b>ができます（左上の「1F／2F」で切り替え）。ショップの<b>🏗️ 施設</b>で、テイクアウト窓口・仕込み設備（何時間もかけて大量に作る料理）・個室（VIP）・テラス席・エレベーターを増築できます。</li>
       <li>第2章（首都圏）からは<b>2号店・3号店</b>を出せます。カフェ画面右上で店を切り替え、スタッフタブでスタッフの異動と<b>店長代理</b>の任命をします。表示していない店は店長代理がいる間だけ営業します。</li>
+      <li>第3章（アジア）からは<b>フランチャイズ</b>。正社員を加盟店の店長として送り出すと、能力に応じた売上が留守中も入り続けます。</li>
       <li>スタッフは<b>能力</b>（💪体力・🍳調理・🏃配膳・🤝忠誠度）をそれぞれ★1〜5で持ち、合計から総合評価（C〜SS）が決まります。<b>体力</b>は★1つにつき1日働ける分（店長は無限）。忠誠度が高いほど休憩からの復帰が速く、激励やドリンクへの不満も溜まりにくくなります。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>
       <li>アプリを閉じている間も、カウンターの料理と調理中の料理がある間は<b>営業</b>します。出かける前に料理を多めに作っておきましょう。</li>
       <li>お客さんを<b>タップするとスカウト</b>できます。雇った人はまず<b>アルバイト</b>で、契約期間が終わると辞めてしまいます。</li>
@@ -2377,6 +2449,18 @@ document.addEventListener('click', e => {
     case 'editLayout': setEditing(true); break;
     case 'viewFloor': setViewFloor(+d.fl); break;
     case 'shop': switchShop(+d.i); break;
+    case 'franchise': openFranchise(d.region, +d.id); break;
+    case 'closeFranchise': closeFranchise(+d.id); break;
+    case 'askFranchise': {
+      const perms = S.staff.filter(x => x.type === 'perm' && !x.owner && !x.away);
+      openModal(`<h2>${REGION[d.region].icon} ${REGION[d.region].name}に出店：店長を選ぶ</h2>
+        <p class="note">送り出した正社員は加盟店の店長になり、この店では働かなくなります（正社員の枠には数えます）。売上は店長の総合力で決まります。</p>
+        <div class="item-list">${perms.length ? perms.map(m => itemRow('🧑‍🍳', `${displayName(m)} <small>総合 ${gradeOf(m)}</small>`,
+          `売上 ${yen(Math.round(FRANCHISE[d.region].perHour * powerOf(m) / 3))}／時`, 0, 'franchise', `data-region="${d.region}" data-id="${m.id}"`, false, '任せる')).join('')
+          : '<p class="note">この店に送り出せる正社員がいません。</p>'}</div>
+        <div class="actions"><button class="btn ghost" data-action="close">やめる</button></div>`);
+      break;
+    }
     case 'openShop': openShop(); break;
     case 'setManager': setManager(+d.id); break;
     case 'transfer': transferStaff(+d.id, +d.to); break;
@@ -2461,6 +2545,8 @@ function frame(t) {
   last = t;
   update(dt);
   shopTick(dt);
+  franchiseTimer += dt;
+  if (franchiseTimer >= 10) { franchiseTimer = 0; payFranchises(); }
   renderFloor();
   spyFrame(dt);
   uiTimer += dt;
@@ -2476,7 +2562,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 
 new ResizeObserver(() => computeLayout()).observe(floor);
 
-const worthReport = r => r.away >= 60 * 1000 || r.served || r.done.length || r.quit.length || r.town.length;
+const worthReport = r => r.away >= 60 * 1000 || r.franchise || r.served || r.done.length || r.quit.length || r.town.length;
 
 // 別のアプリに切り替えていた間も、戻ったときに追いかけて進める
 document.addEventListener('visibilitychange', () => {
