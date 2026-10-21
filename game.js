@@ -708,7 +708,7 @@ function addXp(n) {
     S.xp -= xpNeeded(S.level);
     S.level++;
     const unlocked = DISHES.filter(d => d.level === S.level).map(d => d.emoji + d.name);
-    toast(`🎉 レベル${S.level}になりました！`, true);
+    toast(`🎉 店長レベル${S.level}になりました！`, true);
     if (unlocked.length) toast(`新メニュー解禁：${unlocked.join('、')}`);
   }
 }
@@ -743,6 +743,7 @@ function promote(id) {
   s.expireAt = 0;
   S.stats.promoted++;
   toast(`📜 ${displayName(s)}と永久雇用契約を結びました！ 正社員になりました`, true);
+  react(s, 'promote', false);
   save();
 }
 
@@ -777,6 +778,7 @@ function demote(id) {
   s.type = 'part';
   s.expireAt = Date.now() + CONTRACT_SEC * 1000;
   toast(`⬇ ${displayName(s)}をアルバイトに降格しました（契約${fmtTime(CONTRACT_SEC)}）。正社員の枠が1つ空きました`);
+  react(s, 'demote');
   closeModal();
   save();
 }
@@ -792,7 +794,7 @@ function rankNeeds() {
   if (!next) return [];
   const n = next.need;
   return [
-    { label: `レベル ${n.level} 以上`, ok: S.level >= n.level, now: `Lv${S.level}` },
+    { label: `店長レベル ${n.level} 以上`, ok: S.level >= n.level, now: `Lv${S.level}` },
     { label: `接客 ${n.served.toLocaleString('ja-JP')}人`, ok: S.stats.served >= n.served, now: `${S.stats.served.toLocaleString('ja-JP')}人` },
     { label: `正社員 ${n.perm}人`, ok: permCount() >= n.perm, now: `${permCount()}人` },
   ];
@@ -1676,6 +1678,14 @@ function renderShop(el) {
 `);
 }
 
+// 店長レベルと店舗ランクの違い（店長画面とランクのタブに出す）
+const LEVEL_RANK_HTML = `<div class="lv-rank">
+  <div><b>⭐ 店長レベル</b><small>店長の経験。接客と調理で経験値がたまり、自動で上がる</small>
+    <ul><li>新しいメニューが解禁される</li><li>魅力が上がる（2レベルごとに +1）</li><li>お客さんが少し増える</li><li>店舗ランクを上げる条件になる</li></ul></div>
+  <div><b>🏆 店舗ランク</b><small>お店の大きさ。条件を満たしたら、お金を払って自分で上げる</small>
+    <ul><li>コンロ・テーブル・スタッフ・正社員の枠の上限が増える</li><li>敷地が広がる（ランク6で2階）</li><li>施設を増築できるようになる</li><li>街に格の高い店が現れる</li></ul></div>
+</div>`;
+
 // 店舗ランク（お店のいちばんの目標なので、ショップとは別のタブ）
 const canRankUp = () => { const next = RANKS[S.rank + 1]; return !!next && rankNeeds().every(r => r.ok) && S.money >= next.cost; };
 function renderRank(el) {
@@ -1686,7 +1696,7 @@ function renderRank(el) {
   const r = rankOf();
   setKeyed(el, 'rank', key, `
     <h3>🏆 店舗ランク</h3>
-    <p class="note">条件とお金がそろったらランクアップ。コンロ・テーブル・スタッフ・設備強化の上限が増え、街にも格の高い店が現れます。</p>
+    <p class="note">条件とお金がそろったら、お金を払ってランクアップ。</p>
     <div class="rank-card">
       <div class="rank-now"><span class="rank-icon">${r.icon}</span><div><small>ランク${S.rank + 1}</small><b>${r.name}</b>
         <div class="sub">コンロ ${r.stoves}台・テーブル ${r.tables}卓・スタッフ ${r.staff}人・強化 Lv${upMax()} まで</div></div></div>
@@ -1698,6 +1708,8 @@ function renderRank(el) {
           ${canRank ? `${yen(next.cost)} でランクアップ` : '条件を満たすとランクアップできます'}</button>`
       : '<p class="note">最高ランクです！</p>'}
     </div>
+    <h3>店長レベルと店舗ランクの違い</h3>
+    ${LEVEL_RANK_HTML}
     <h3>ランク一覧</h3>
     <div class="item-list">${RANKS.map((k, i) => `<div class="row ${i === S.rank ? 'on' : ''}">
       <div class="ico">${k.icon}</div>
@@ -1709,7 +1721,7 @@ function renderRank(el) {
 function renderOwner() {
   const el = $('owner');
   const st = S.stats;
-  const key = [S.rank, S.level, st.served, st.hired, st.promoted, S.staff.length, S.money, charm(), blend(null),
+  const key = [S.rank, S.level, S.xp, st.served, st.hired, st.promoted, S.staff.length, S.money, charm(), blend(null),
     JSON.stringify(S.wardrobe), S.recipes.length, st.battlesWon, st.poached].join('|');
   setKeyed(el, 'owner', key, `
     <div class="protag-card">
@@ -1722,13 +1734,20 @@ function renderOwner() {
       </div>
     </div>
     <p class="note"><b>魅力</b>は店員を口説く成功率（格下の店ではメロメロにも）、<b>馴染み</b>は潜入で失敗したときの警戒の増えにくさに効きます。</p>
+    <h3>⭐ 店長レベル ${S.level}</h3>
+    <div class="bar"><i style="width:${Math.min(100, S.xp / xpNeeded(S.level) * 100).toFixed(1)}%"></i></div>
+    <p class="note">次のレベルまで 経験値 ${S.xp}/${xpNeeded(S.level)}（接客1人で1、料理を作ると料理ごとの経験値）。${(() => {
+      const nx = DISHES.filter(d => !d.secret && d.level > S.level).sort((a, b) => a.level - b.level)[0];
+      return nx ? `次の解禁：レベル${nx.level}で ${nx.emoji}${nx.name}` : 'メニューはすべて解禁済み';
+    })()}</p>
+    ${LEVEL_RANK_HTML}
     <div class="item-list">
       ${itemRow('👗', '身支度・美容院', '服・頭・顔・小物の着せ替えと、髪型・髪色の変更', 0, 'closet', '', false, '開く')}
     </div>
     <h3>📊 お店の記録</h3>
     <div class="stat-grid">
       <div>店舗ランク<b>${rankOf().icon} ${rankOf().name}</b></div>
-      <div>レベル<b>Lv${S.level}</b></div>
+      <div>店長レベル<b>Lv${S.level}</b></div>
       <div>所持金<b>${yen(S.money)}</b></div>
       <div>接客したお客さん<b>${st.served.toLocaleString('ja-JP')}人</b></div>
       <div>スタッフ<b>${S.staff.length}/${staffCap()}人</b></div>
@@ -1853,14 +1872,25 @@ const REACTIONS = {
     'まだ働かせる気ですね…', '差し入れのつもりですか？ 燃料補給ですよね、これ', '退勤って言葉、この店の辞書にあります？',
     'エナドリより先に、お給料を上げてください', 'これ飲んだら、あと何日働けばいいんですか…',
   ],
+  // 正社員になったとき（永久雇用契約）
+  promote: [
+    '「永久」って、もう逃げられないってことですよね…', 'おめでとうって顔してますけど、これ罰ゲームですよね？', '正社員手当は？ ボーナスは？ …出ないんですね',
+    '契約書の「永久」の字だけ、やけに大きくないですか', 'これで休みの日も呼び出されるんですね', '昇格じゃなくて、出口のない部屋に入っただけでは…',
+  ],
+  // アルバイトに降格されたとき
+  demote: [
+    '昨日まで「うちは家族だ」って言ってましたよね？', '永久雇用の「永久」って、こんなに短いんですね', '降格されても、仕事の量は同じなんでしょうね…',
+    '正社員の枠が欲しかっただけですよね、知ってます', 'これが噂の「追い出し部屋」ってやつですか', '使うだけ使って、要らなくなったら降格ですか',
+  ],
   angry: [
     'この店、36協定って出してます？', '求人票に「アットホームな職場」って書いてありましたよね', '永久雇用契約って、永久に休めない契約のことだったんですね',
     '店長の血の色、何色ですか？', '辞めたいって言ったら、また「永久」の二文字を見せられるんですよね…', 'ブラック企業大賞、狙ってます？',
   ],
 };
 const SAY_MS = 5000;
-function react(s, kind) {
-  s.abuse = (s.abuse || 0) + 1;
+// count が false のときは、きつくなるまでの回数に数えない（正社員になったときなど）
+function react(s, kind, count = true) {
+  if (count) s.abuse = (s.abuse || 0) + 1;
   // 忠誠度が高いほど、きつい台詞が出るまでの回数が多い（★×2回）
   const pool = s.abuse >= statsOf(s).loyal * 2 ? [...REACTIONS[kind], ...REACTIONS.angry, ...REACTIONS.angry] : REACTIONS[kind];
   const line = rand(pool);
@@ -1900,7 +1930,7 @@ function updateHpBars(root) {
 function openWelcome(rep) {
   const items = [
     ...(rep.served ? [`<li class="good">🍽️ 留守中も営業して <b>${rep.served.toLocaleString('ja-JP')}人</b>を接客し、<b>${yen(rep.sales)}</b> の売上がありました</li>`] : []),
-    ...(rep.level ? [`<li class="good">🎉 レベル${rep.level[0]} → <b>レベル${rep.level[1]}</b>になりました！</li>`] : []),
+    ...(rep.level ? [`<li class="good">🎉 店長レベル${rep.level[0]} → <b>${rep.level[1]}</b>になりました！</li>`] : []),
     ...(rep.soldOut ? ['<li class="bad">🈳 カウンターの料理が売り切れて、途中で閉店しました。出かける前に多めに作っておきましょう</li>'] : []),
     ...rep.done.map(d => `<li class="good">${DISH[d.dish].emoji} コンロ${d.i + 1}：${d.cook}が<b>${DISH[d.dish].name}</b>を作り、${d.n}人前をカウンターに並べました</li>`),
     ...S.stoves.map((st, i) => st.dish && st.progress < st.duration && !rep.idle.some(d => d.i === i)
@@ -1978,6 +2008,7 @@ function openHelp() {
       <li>スタッフはカウンターの奥の厨房で待機し、右端のスタッフ出入口から客席へ出てカウンターの料理をお客さんへ運び、食べ終わるとお金がもらえます。お客さんは<b>基本的に安い料理から</b>頼みます。</li>
       <li>スタッフの仕事は「配膳 → 調理 → 片付け」の順に優先されます。調理中の人は配膳できないので、「スタッフ」で<b>持ち場（ホール／厨房／両方）</b>を決めておくと安心です。</li>
       <li>料理が届かないまま待たせすぎると、お客さんは怒って帰ってしまいます。</li>
+      <li><b>⭐ 店長レベル</b>は店長の経験で、接客と調理で自動で上がり、新メニューの解禁・魅力・来客数に効きます。<b>🏆 店舗ランク</b>はお店の大きさで、条件（店長レベル・接客人数・正社員の数）を満たしたらお金を払って上げ、設備の上限・敷地・施設・街の店の格が広がります。</li>
       <li>カフェ画面右上の<b>🛠 配置</b>で、テーブル・コンロ・観葉植物などをドラッグして好きな場所へ動かせます。</li>
       <li>ランクが上がると<b>敷地</b>が広がり、ランク6で<b>2階</b>ができます（左上の「1F／2F」で切り替え）。ショップの<b>🏗️ 施設</b>で、テイクアウト窓口・仕込み設備（何時間もかけて大量に作る料理）・個室（VIP）・テラス席・エレベーターを増築できます。</li>
       <li>スタッフは<b>能力</b>（💪体力・🍳調理・🏃配膳・🤝忠誠度）をそれぞれ★1〜5で持ち、合計から総合評価（C〜SS）が決まります。<b>体力</b>は★1つにつき1日働ける分（店長は無限）。忠誠度が高いほど休憩からの復帰が速く、激励やドリンクへの不満も溜まりにくくなります。尽きると奥の<b>💤 休憩室</b>で休み、満タンになると自動で職場に戻ります。休憩室をタップして<b>💪 激励</b>すると1時間分回復してすぐ戻ります。ショップの<b>🥤 エナジードリンク</b>は体力を1日分回復します（激励とは別で、休憩中の人は満タンになったら戻ります）。</li>

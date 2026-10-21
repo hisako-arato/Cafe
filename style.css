@@ -1223,3 +1223,11 @@ h3 small.note { font-weight: 600; margin-left: 6px; }
 .table.closed { opacity: .45; filter: grayscale(.7); }
 .person.vip .sprite { filter: drop-shadow(0 0 .35cqw #fff) drop-shadow(0 0 1.2cqw #fbbf24); }
 .person.takeout { pointer-events: none; }
+
+/* 店長レベルと店舗ランクの違い */
+.lv-rank { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 8px; }
+.lv-rank > div { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: var(--panel-2); font-size: .78rem; }
+.lv-rank b { display: block; font-size: .9rem; }
+.lv-rank small { display: block; color: var(--muted); line-height: 1.4; margin: 2px 0 4px; }
+.lv-rank ul { margin: 0; padding-left: 1.1em; line-height: 1.5; }
+.stat.level { cursor: pointer; }
