@@ -1801,7 +1801,20 @@ function stoveCard(st, i, s) {
   return `<div class="stove ${s.kind}">
     <div class="stove-head">${s.cook ? card(s.cook, roleOf(s.cook)) : ''}<div class="big">${d.emoji}</div></div>
     ${d.name}<div class="bar"><i data-prog="${i}"></i></div>
-    <span>${who}</span><span data-left="${i}"></span></div>`;
+    <span>${who}</span><span data-left="${i}"></span>
+    ${st.prep ? `<button class="btn ghost small" data-action="askCancelPrep" data-i="${i}">✕ 中止</button>` : ''}</div>`;
+}
+// 仕込みの中止（材料費は戻らない）
+function cancelPrep(i) {
+  const st = S.stoves[i];
+  if (!st || !st.prep || !st.dish || st.progress >= st.duration) return;
+  const d = DISH[st.dish];
+  const cook = st.cook != null && S.staff.find(s => s.id === st.cook);
+  if (cook && cook.task?.type === 'cook') cook.task = null;
+  Object.assign(st, newStove());
+  toast(`✕ ${stoveName(i)}の${d.emoji}${d.name}の仕込みを中止しました（材料費 ${yen(d.cost)} は戻りません）`);
+  closeModal();
+  save();
 }
 
 function renderCook(el) {
@@ -2518,6 +2531,17 @@ document.addEventListener('click', e => {
       break;
     case 'reset': resetGame(); break;
     case 'restRoom': openRestRoom(); break;
+    case 'cancelPrep': cancelPrep(+d.i); break;
+    case 'askCancelPrep': {
+      const st = S.stoves[+d.i];
+      if (!st || !st.prep || !st.dish) break;
+      const dd = DISH[st.dish];
+      openModal(`<h2>${dd.emoji} ${dd.name}の仕込みを中止しますか？</h2>
+        <p>進み具合（${Math.floor(st.progress / st.duration * 100)}%）はなくなり、<b>材料費 ${yen(dd.cost)} は戻りません</b>。</p>
+        <div class="actions"><button class="btn ghost" data-action="close">続ける</button>
+        <button class="btn danger" data-action="cancelPrep" data-i="${+d.i}">中止する</button></div>`);
+      break;
+    }
     case 'staffInfo': openStaffInfo(+d.id); break;
     case 'cheer': cheer(+d.id); break;
     case 'drink': useDrink(+d.id); break;
