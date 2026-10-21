@@ -9,6 +9,7 @@ const CUST_SPEED = 22;      // お客さんの歩く速さ（%/秒）
 const CHEAPEST_RATE = 0.8;  // お客さんが一番安い料理を頼む確率
 const MAX_STOVES = 8;        // 全ランクを通しての上限
 const MAX_TABLES = 12;
+const MAX_TABLE_SLOTS = MAX_TABLES + 2 + 1;   // テラス席で +2、個室で +1
 // 体力：★1つにつき1連勤（1日働ける分）。★3でおよそ3連勤、★5でおよそ5連勤。店長は無限
 const SHIFT_SEC = 24 * 3600;
 const REST_RATE = 10;        // 休憩中は減る速さの10倍で回復（忠誠度★3のとき。★1つにつき±15%）
@@ -740,7 +741,7 @@ function computeLayout() {
   const rows1 = Math.max(1, Math.ceil(n1 / cols));
   const top1 = L.r >= 1.15 ? 63 : 56;
   const gap1 = rows1 > 1 ? Math.min(19, (L.frontV - 12 - top1) / (rows1 - 1)) : 19;
-  L.tables = Array.from({ length: MAX_TABLES + 1 }, (_, i) => {
+  L.tables = Array.from({ length: MAX_TABLE_SLOTS }, (_, i) => {
     const f = i < MAX_FLOOR1 ? 1 : 2, j = f === 1 ? i : i - MAX_FLOOR1;
     const v = f === 1 ? top1 + Math.floor(j / cols) * gap1 : 44 + Math.floor(j / cols) * 19;
     return { x: xs[j % cols], y: u(v), fl: f };
@@ -2567,16 +2568,21 @@ function frame(t) {
   // 最初のフレームは t が last より前になることがあるので 0 未満にしない
   const dt = Math.min(0.1, Math.max(0, (t - last) / 1000));
   last = t;
-  update(dt);
-  shopTick(dt);
-  franchiseTimer += dt;
-  if (franchiseTimer >= 10) { franchiseTimer = 0; payFranchises(); }
-  renderFloor();
-  spyFrame(dt);
-  uiTimer += dt;
-  if (uiTimer >= 0.2) { uiTimer = 0; renderUI(); }
-  saveTimer += dt;
-  if (saveTimer >= 5) { saveTimer = 0; save(); }
+  // 思わぬエラーがあっても、ゲームの時間は止めない
+  try {
+    update(dt);
+    shopTick(dt);
+    franchiseTimer += dt;
+    if (franchiseTimer >= 10) { franchiseTimer = 0; payFranchises(); }
+    renderFloor();
+    spyFrame(dt);
+    uiTimer += dt;
+    if (uiTimer >= 0.2) { uiTimer = 0; renderUI(); }
+    saveTimer += dt;
+    if (saveTimer >= 5) { saveTimer = 0; save(); }
+  } catch (e) {
+    console.error(e);
+  }
   requestAnimationFrame(frame);
 }
 
